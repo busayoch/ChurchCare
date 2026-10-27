@@ -1,0 +1,103 @@
+name: ChurchCare Android Cloud Build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '**.zip'
+      - '**/*.zip'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: churchcare-android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-debug:
+    name: Build ChurchCare debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select latest source ZIP
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_PATH="$(git log -1 --format= --name-only --diff-filter=AM -- '*.zip' | grep -E '\.zip$' | head -n 1 || true)"
+          if [ -z "$ZIP_PATH" ] || [ ! -f "$ZIP_PATH" ]; then
+            echo "::error::No source ZIP found. Upload the complete ChurchCare project ZIP to this repository, then push/commit it or run this workflow again."
+            exit 1
+          fi
+          echo "Selected source archive: $ZIP_PATH"
+          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Extract source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/churchcare-source"
+          unzip -q "${{ steps.source.outputs.zip_path }}" -d "$RUNNER_TEMP/churchcare-source"
+          echo "Extracted archive. Searching for Gradle wrapper..."
+          find "$RUNNER_TEMP/churchcare-source" -type f -name gradlew -print
+          WRAPPER="$(find "$RUNNER_TEMP/churchcare-source" -type f -name gradlew -print -quit)"
+          if [ -z "$WRAPPER" ]; then
+            echo "::error::The selected ZIP does not contain a Gradle wrapper (gradlew). Ensure it is the complete Android project ZIP."
+            exit 1
+          fi
+          PROJECT_DIR="$(dirname "$WRAPPER")"
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_ENV"
+          chmod +x "$WRAPPER"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build debug APK
+        shell: bash
+        working-directory: ${{ env.project_dir }}
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Collect APK and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find "$project_dir" -type f -path '*/build/outputs/apk/debug/*.apk' -print -quit)"
+          if [ -z "$APK" ]; then
+            echo "::error::Gradle completed but no debug APK was found under build/outputs/apk/debug/."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/churchcare-output"
+          cp "$APK" "$RUNNER_TEMP/churchcare-output/ChurchCare-debug.apk"
+          cd "$RUNNER_TEMP/churchcare-output"
+          sha256sum ChurchCare-debug.apk > SHA256SUMS.txt
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChurchCare-debug-apk
+          path: |
+            ${{ runner.temp }}/churchcare-output/ChurchCare-debug.apk
+            ${{ runner.temp }}/churchcare-output/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
