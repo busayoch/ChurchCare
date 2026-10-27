@@ -125,3 +125,23 @@ jobs:
             ${{ runner.temp }}/churchcare-output/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
+
+      - name: Package updated source ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT_PARENT="$(dirname "$project_dir")"
+          PROJECT_NAME="$(basename "$project_dir")"
+          SOURCE_ZIP="$RUNNER_TEMP/churchcare-output/ChurchCare-0.6.8-Settings-About-Icon-Source.zip"
+          cd "$PROJECT_PARENT"
+          zip -qr "$SOURCE_ZIP" "$PROJECT_NAME" -x "$PROJECT_NAME/.gradle/*" "$PROJECT_NAME/**/build/*" "$PROJECT_NAME/**/.DS_Store"
+          unzip -tq "$SOURCE_ZIP"
+          echo "Created patched source archive: $SOURCE_ZIP"
+
+      - name: Upload updated source ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChurchCare-0.6.8-Settings-About-Icon-Source
+          path: ${{ runner.temp }}/churchcare-output/ChurchCare-0.6.8-Settings-About-Icon-Source.zip
+          if-no-files-found: error
+          retention-days: 14
