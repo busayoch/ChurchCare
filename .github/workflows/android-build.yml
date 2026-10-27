@@ -11,7 +11,7 @@ on:
       - '.github/assets/**'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: churchcare-android-build-${{ github.ref }}
@@ -91,7 +91,6 @@ jobs:
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
           echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
-          # Accept available SDK licences without an interactive terminal.
           (yes | "$SDKMANAGER" --licenses) >/dev/null 2>&1 || true
           "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
@@ -137,6 +136,22 @@ jobs:
           zip -qr "$SOURCE_ZIP" "$PROJECT_NAME" -x "$PROJECT_NAME/.gradle/*" "$PROJECT_NAME/**/build/*" "$PROJECT_NAME/**/.DS_Store"
           unzip -tq "$SOURCE_ZIP"
           echo "Created patched source archive: $SOURCE_ZIP"
+
+      - name: Commit updated source ZIP to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_NAME="ChurchCare-0.6.8-Settings-About-Icon-Source.zip"
+          cp "$RUNNER_TEMP/churchcare-output/$SOURCE_NAME" "$GITHUB_WORKSPACE/$SOURCE_NAME"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$SOURCE_NAME"
+          if git diff --cached --quiet; then
+            echo "The committed source ZIP is already up to date; no new commit needed."
+            exit 0
+          fi
+          git commit -m "Add ChurchCare 0.6.8 source ZIP with icon and Settings/About"
+          git push origin "HEAD:main"
 
       - name: Upload updated source ZIP artifact
         uses: actions/upload-artifact@v4
