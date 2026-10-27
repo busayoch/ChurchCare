@@ -62,6 +62,18 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Accept preinstalled Android SDK licences
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print 2>/dev/null | sort -V | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::Could not find preinstalled Android SDK sdkmanager."
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses || true
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
