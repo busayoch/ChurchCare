@@ -1,0 +1,70 @@
+name: ChurchCare Clean Foundation Build
+
+on:
+  push:
+    branches:
+      - rebuild/clean-android-foundation
+    paths:
+      - 'rebuild/android/**'
+      - '.github/workflows/churchcare-foundation-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: churchcare-clean-foundation
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compile clean ChurchCare foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout foundation branch
+        uses: actions/checkout@v4
+        with:
+          ref: rebuild/clean-android-foundation
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compile debug APK
+        working-directory: rebuild/android
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify APK and report checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="rebuild/android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          sha256sum "$APK" | tee SHA256SUMS.txt
+          echo "APK compiled. Device/emulator launch is not yet verified."
+
+      - name: Upload foundation APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChurchCare-clean-foundation-debug-apk
+          path: |
+            rebuild/android/app/build/outputs/apk/debug/app-debug.apk
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
