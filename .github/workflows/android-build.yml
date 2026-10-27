@@ -8,6 +8,7 @@ on:
       - '**/*.zip'
       - '.github/workflows/android-build.yml'
       - '.github/scripts/**'
+      - '.github/assets/**'
 
 permissions:
   contents: read
