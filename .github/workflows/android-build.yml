@@ -58,6 +58,13 @@ jobs:
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_ENV"
           chmod +x "$WRAPPER"
 
+      - name: Generate ChurchCare launcher icons
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet Pillow
+          python3 "$GITHUB_WORKSPACE/.github/scripts/apply-launcher-branding.py" "$project_dir"
+
       - name: Add Settings / About version menu
         shell: bash
         run: |
