@@ -139,13 +139,7 @@ jobs:
             adb logcat -c
             adb shell am start -W -n com.churchcare.app/.MainActivity
             sleep 8
-            if adb shell pidof com.churchcare.app >/dev/null 2>&1; then
-              echo "ChurchCare remained running after launch."
-            else
-              echo "::error::ChurchCare process exited after launch. AndroidRuntime log follows."
-              adb logcat -d -s AndroidRuntime:E ActivityTaskManager:E
-              exit 1
-            fi
+            if adb shell pidof com.churchcare.app >/dev/null 2>&1; then echo "ChurchCare remained running after launch."; else echo "::error::ChurchCare process exited after launch. AndroidRuntime log follows."; adb logcat -d -s AndroidRuntime:E ActivityTaskManager:E; exit 1; fi
 
       - name: Package updated source ZIP
         shell: bash
