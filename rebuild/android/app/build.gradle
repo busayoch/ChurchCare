@@ -11,3 +11,7 @@ android {
         versionName '0.7.0-foundation'
     }
 }
+
+dependencies {
+    implementation 'com.google.android.gms:play-services-auth:22.0.0'
+}

@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.net.Uri;
 import org.json.JSONObject;
 import java.io.ByteArrayInputStream;
@@ -36,6 +37,13 @@ import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import com.google.android.gms.auth.api.identity.AuthorizationRequest;
+import com.google.android.gms.auth.api.identity.AuthorizationResult;
+import com.google.android.gms.auth.api.identity.Identity;
+import com.google.android.gms.common.api.Scope;
 
 public final class MainActivity extends Activity {
     private MemberDatabase database;
@@ -44,6 +52,8 @@ public final class MainActivity extends Activity {
     private static final int PICK_MEMBER_PHOTO = 7104;
     private static final int EXPORT_BACKUP = 7105;
     private static final int IMPORT_BACKUP = 7106;
+    private static final int DRIVE_AUTHORIZATION = 7107;
+    private String pendingDriveAction = "";
     private String photoRecordId;
     private String photoColumn;
 
@@ -450,8 +460,10 @@ public final class MainActivity extends Activity {
     private String today(){return new SimpleDateFormat("yyyy-MM-dd",Locale.US).format(new Date());}
 
     private void showSync() {
-        base("Sync queue & status","Local data remains available without internet. Cloud synchronization is not connected yet.");
+        base("Sync queue & status","Offline records stay on this device. Cloud backup is explicit; automatic multi-device sync is not active.");
         Button exportButton=new Button(this); exportButton.setText("Export local backup"); exportButton.setAllCaps(false); exportButton.setOnClickListener(v->{ Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("application/zip"); intent.putExtra(Intent.EXTRA_TITLE,"ChurchCare-backup-"+new SimpleDateFormat("yyyyMMdd-HHmm",Locale.US).format(new Date())+".zip"); startActivityForResult(intent,EXPORT_BACKUP); }); root.addView(exportButton);
+        Button driveUpload=new Button(this); driveUpload.setText("Back up full ChurchCare data to Google Drive"); driveUpload.setAllCaps(false); driveUpload.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Upload full ChurchCare backup?").setMessage("This uploads a full ZIP backup of member records, visits, care cases, notes, the change log, and accessible member photos to the Google Drive account you authorize. These may contain sensitive pastoral information. Upload only to an account and Drive location you trust. Extra photos are included in this explicit full backup, but are not part of automatic sync.").setNegativeButton("Cancel",null).setPositiveButton("Continue",(d,w)->authorizeDrive("upload")).show()); root.addView(driveUpload);
+        Button driveRestore=new Button(this); driveRestore.setText("Restore latest ChurchCare Drive backup"); driveRestore.setAllCaps(false); driveRestore.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Replace this device's records?").setMessage("ChurchCare will download the newest backup created by this app in the Google Drive account you authorize and replace the records and change log on this device. Export a local backup first. Only continue if you trust the selected Google account and backup.").setNegativeButton("Cancel",null).setPositiveButton("Continue",(d,w)->authorizeDrive("restore")).show()); root.addView(driveRestore);
         Button importButton=new Button(this); importButton.setText("Restore from backup (replaces local records)"); importButton.setAllCaps(false); importButton.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Restore ChurchCare backup?").setMessage("Restore replaces the records and change log currently stored on this device. Export a backup of the current data first if you may need it. Only choose a trusted ChurchCare ZIP backup or an older ChurchCare JSON backup.").setNegativeButton("Cancel",null).setPositiveButton("Choose backup",(d,w)->{ Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("*/*"); intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivityForResult(intent,IMPORT_BACKUP); }).show()); root.addView(importButton);
         TextView summary=new TextView(this); summary.setText("Records on this device\nMembers: "+database.count("members")+"\nOrganizations: "+database.count("organizations")+"\nAppointments: "+database.count("appointments")+"\nDelegations: "+database.count("delegations")+"\nVisits: "+database.count("visits")+"\nCare cases: "+database.count("care_records")+"\n\nPending change events: "+database.pendingChanges()+"\n\nNo data has been uploaded. Google Drive integration must be configured and tested before synchronization can run."); summary.setTextColor(ink); summary.setTextSize(15); summary.setPadding(dp(12),dp(12),dp(12),dp(12)); root.addView(summary);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
@@ -568,7 +580,116 @@ public final class MainActivity extends Activity {
         database.restoreBackup(backup);
     }
 
+
+    /** Request Drive permission only when the user starts a Drive operation. */
+    private void authorizeDrive(String action) {
+        pendingDriveAction = action;
+        AuthorizationRequest request = AuthorizationRequest.builder()
+            .setRequestedScopes(java.util.Collections.singletonList(new Scope("https://www.googleapis.com/auth/drive.file"))).build();
+        Identity.getAuthorizationClient(this).authorize(request)
+            .addOnSuccessListener(this::continueDriveAuthorization)
+            .addOnFailureListener(error -> showDriveError("Google Drive authorization failed. Check Google Play services and the Google Cloud OAuth setup. " + error.getClass().getSimpleName()));
+    }
+
+    private void continueDriveAuthorization(AuthorizationResult result) {
+        if (result.hasResolution()) {
+            try { startIntentSenderForResult(result.getPendingIntent().getIntentSender(), DRIVE_AUTHORIZATION, null, 0, 0, 0); }
+            catch (IntentSender.SendIntentException error) { showDriveError("Could not open Google's permission screen. " + error.getClass().getSimpleName()); }
+            return;
+        }
+        String token = result.getAccessToken();
+        if (token == null || token.isEmpty()) { showDriveError("Google did not return a Drive access token. Please try again."); return; }
+        runDriveAction(token, pendingDriveAction);
+    }
+
+    private void runDriveAction(String token, String action) {
+        Toast.makeText(this, action.equals("upload") ? "Preparing secure backup…" : "Looking for the latest Drive backup…", Toast.LENGTH_LONG).show();
+        new Thread(() -> {
+            try {
+                if ("upload".equals(action)) {
+                    String name = "ChurchCare-cloud-backup-" + new SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(new Date()) + ".zip";
+                    File archive = new File(getCacheDir(), "churchcare-drive-upload.zip");
+                    try (OutputStream out = new FileOutputStream(archive)) { exportBackupArchive(out); }
+                    if (archive.length() > 100L * 1024L * 1024L) throw new java.io.IOException("Backup exceeds the 100 MB safety limit.");
+                    uploadDriveBackup(token, archive, name);
+                    archive.delete();
+                    runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Google Drive backup complete")
+                        .setMessage("ChurchCare uploaded " + name + ". This is a manual full backup, not live multi-device synchronization.")
+                        .setPositiveButton("OK", (d,w) -> showSync()).show());
+                } else if ("restore".equals(action)) {
+                    byte[] backup = downloadLatestDriveBackup(token);
+                    restoreBackupArchive(backup);
+                    runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Drive backup restored")
+                        .setMessage("The latest ChurchCare ZIP backup was restored. Review member records and photos before continuing.")
+                        .setPositiveButton("OK", (d,w) -> showHome()).show());
+                } else throw new java.io.IOException("Unknown Drive action.");
+            } catch (Exception error) {
+                android.util.Log.e("ChurchCare", "Drive operation failed", error);
+                runOnUiThread(() -> showDriveError("Google Drive operation did not complete. Your current records should remain unchanged if download validation or the restore transaction failed. Details: " + error.getMessage()));
+            }
+        }, "ChurchCare-Drive").start();
+    }
+
+    private void uploadDriveBackup(String token, File archive, String filename) throws Exception {
+        String boundary = "churchcare_" + System.currentTimeMillis();
+        HttpURLConnection connection = (HttpURLConnection) new URL("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime").openConnection();
+        connection.setRequestMethod("POST"); connection.setConnectTimeout(20000); connection.setReadTimeout(60000);
+        connection.setDoOutput(true); connection.setChunkedStreamingMode(8192);
+        connection.setRequestProperty("Authorization", "Bearer " + token);
+        connection.setRequestProperty("Content-Type", "multipart/related; boundary=" + boundary);
+        JSONObject metadata = new JSONObject(); metadata.put("name", filename); metadata.put("mimeType", "application/zip");
+        byte[] head = ("--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + metadata + "\r\n--" + boundary + "\r\nContent-Type: application/zip\r\n\r\n").getBytes(StandardCharsets.UTF_8);
+        try (OutputStream out = connection.getOutputStream(); InputStream in = new FileInputStream(archive)) {
+            out.write(head); byte[] buffer = new byte[8192]; int count;
+            while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+            out.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+        }
+        int status = connection.getResponseCode(); String response = readHttpResponse(connection, status); connection.disconnect();
+        if (status < 200 || status >= 300) throw new java.io.IOException("Drive upload HTTP " + status + ": " + response);
+    }
+
+    private byte[] downloadLatestDriveBackup(String token) throws Exception {
+        String query = "https://www.googleapis.com/drive/v3/files?q=" + URLEncoder.encode("name contains 'ChurchCare-cloud-backup-' and trashed = false", "UTF-8") + "&orderBy=modifiedTime%20desc&pageSize=1&fields=files(id,name,modifiedTime,size)";
+        HttpURLConnection list = (HttpURLConnection) new URL(query).openConnection();
+        list.setConnectTimeout(20000); list.setReadTimeout(30000); list.setRequestProperty("Authorization", "Bearer " + token);
+        int listStatus = list.getResponseCode(); String listing = readHttpResponse(list, listStatus); list.disconnect();
+        if (listStatus < 200 || listStatus >= 300) throw new java.io.IOException("Drive search HTTP " + listStatus + ": " + listing);
+        org.json.JSONArray files = new JSONObject(listing).optJSONArray("files");
+        if (files == null || files.length() == 0) throw new java.io.IOException("No ChurchCare cloud backup found in this Google Drive account. Upload one first or check the selected account.");
+        String id = files.getJSONObject(0).getString("id");
+        HttpURLConnection download = (HttpURLConnection) new URL("https://www.googleapis.com/drive/v3/files/" + URLEncoder.encode(id, "UTF-8") + "?alt=media").openConnection();
+        download.setConnectTimeout(20000); download.setReadTimeout(60000); download.setRequestProperty("Authorization", "Bearer " + token);
+        int status = download.getResponseCode();
+        if (status < 200 || status >= 300) { String error = readHttpResponse(download, status); download.disconnect(); throw new java.io.IOException("Drive download HTTP " + status + ": " + error); }
+        try (InputStream in = download.getInputStream(); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192]; int count;
+            while ((count = in.read(buffer)) != -1) { if (bytes.size() + count > 100 * 1024 * 1024) throw new java.io.IOException("Drive backup exceeds the 100 MB safety limit."); bytes.write(buffer, 0, count); }
+            download.disconnect(); return bytes.toByteArray();
+        }
+    }
+
+    private String readHttpResponse(HttpURLConnection connection, int status) throws Exception {
+        InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+        if (stream == null) return "";
+        try (InputStream in = stream; ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096]; int count;
+            while ((count = in.read(buffer)) != -1) { if (bytes.size() + count > 1024 * 1024) break; bytes.write(buffer, 0, count); }
+            return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private void showDriveError(String message) {
+        pendingDriveAction = "";
+        new AlertDialog.Builder(this).setTitle("Google Drive not completed").setMessage(message).setPositiveButton("OK", (d,w) -> showSync()).show();
+    }
+
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
+        if(requestCode == DRIVE_AUTHORIZATION) {
+            if(resultCode != RESULT_OK || data == null) { pendingDriveAction = ""; showDriveError("Google Drive permission was cancelled or not granted."); return; }
+            try { continueDriveAuthorization(Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(data)); }
+            catch(Exception error) { pendingDriveAction = ""; showDriveError("Google Drive permission could not be completed. " + error.getClass().getSimpleName()); }
+            return;
+        }
         super.onActivityResult(requestCode,resultCode,data);
         if (resultCode == RESULT_OK && data != null && data.getData() != null && requestCode == EXPORT_BACKUP) {
             try (OutputStream out = getContentResolver().openOutputStream(data.getData(), "w")) {
