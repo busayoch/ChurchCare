@@ -278,12 +278,12 @@ public final class MainActivity extends Activity {
                     String id = get(cursor, "id");
                     String name = get(cursor, displayColumn);
                     if (!name.trim().isEmpty()) {
+                        if (sourceTable.equals("organizations") && ownerTable.equals("organizations")
+                                && id.equals(String.valueOf(field.getTag()))) continue;
                         ids.add(id);
                         String label = sourceTable.equals("organizations")
                             ? join(database.organizationPath(id), get(cursor, "type"))
                             : (get(cursor, "phone").trim().isEmpty() ? name : name + " • " + get(cursor, "phone"));
-                        if (sourceTable.equals("organizations") && ownerTable.equals("organizations")
-                                && id.equals(String.valueOf(field.getTag()))) continue;
                         labels.add(label);
                     }
                 }
