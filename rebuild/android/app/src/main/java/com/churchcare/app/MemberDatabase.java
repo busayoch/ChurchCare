@@ -169,6 +169,26 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         }
     }
 
+
+    public String findIdByName(String table, String nameColumn, String name) {
+        checkTable(table);
+        if (!Arrays.asList("name", "full_name", "person_name", "member_name").contains(nameColumn)) return null;
+        try (Cursor c = getReadableDatabase().query(table, new String[]{"id"}, "deleted=0 AND " + nameColumn + "=? COLLATE NOCASE", new String[]{name.trim()}, null, null, null, "1")) {
+            return c.moveToFirst() ? c.getString(0) : null;
+        }
+    }
+
+    /** Keep no more than five visit records per member, recording removals for later sync. */
+    public void trimVisits(String memberName) {
+        SQLiteDatabase db = getWritableDatabase();
+        java.util.ArrayList<String> ids = new java.util.ArrayList<>();
+        try (Cursor c = db.rawQuery("SELECT id FROM visits WHERE deleted=0 AND member_name=? COLLATE NOCASE ORDER BY visit_date DESC, created_at DESC", new String[]{memberName.trim()})) {
+            int index = 0;
+            while (c.moveToNext()) if (index++ >= 5) ids.add(c.getString(0));
+        }
+        for (String id : ids) softDelete("visits", id);
+    }
+
     public Cursor syncQueue() {
         return getReadableDatabase().rawQuery("SELECT sequence,entity_type,operation,created_at,sync_state,last_error FROM change_log ORDER BY sequence DESC LIMIT 100", null);
     }
