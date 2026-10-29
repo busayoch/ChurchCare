@@ -6,6 +6,7 @@ on:
       - rebuild/clean-android-foundation
     paths:
       - 'rebuild/android/**'
+      - 'rebuild/assets/**'
       - '.github/workflows/churchcare-foundation-build.yml'
   workflow_dispatch:
 
@@ -48,6 +49,18 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+
+      - name: Restore original ChurchCare launcher emblem
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE="rebuild/assets/churchcare-original-icon.png.b64"
+          TARGET="rebuild/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+          test -s "$SOURCE"
+          mkdir -p "$(dirname "$TARGET")"
+          base64 --decode "$SOURCE" > "$TARGET"
+          file "$TARGET" | grep -q 'PNG image data, 192 x 192'
+          echo "Restored the original ChurchCare emblem from the tracked source asset."
 
       - name: Prepare release signing key
         shell: bash
