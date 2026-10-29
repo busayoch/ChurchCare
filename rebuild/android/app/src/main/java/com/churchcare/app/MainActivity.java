@@ -467,20 +467,14 @@ public final class MainActivity extends Activity {
         Button importButton=new Button(this); importButton.setText("Restore from backup (replaces local records)"); importButton.setAllCaps(false); importButton.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Restore ChurchCare backup?").setMessage("Restore replaces the records and change log currently stored on this device. Export a backup of the current data first if you may need it. Only choose a trusted ChurchCare ZIP backup or an older ChurchCare JSON backup.").setNegativeButton("Cancel",null).setPositiveButton("Choose backup",(d,w)->{ Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("*/*"); intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivityForResult(intent,IMPORT_BACKUP); }).show()); root.addView(importButton);
         android.content.SharedPreferences syncPrefs=getSharedPreferences("churchcare_sync_status",MODE_PRIVATE);
         String lastDriveBackup=syncPrefs.getString("drive_backup_time","");
-        String lastDriveFile=syncPrefs.getString("drive_backup_file","");
-        String driveBackupStatus=syncPrefs.getString("drive_backup_status","Not yet confirmed on this installation");
+        String driveBackupStatus=syncPrefs.getString("drive_backup_status","Not yet confirmed");
         String lastDriveRestore=syncPrefs.getString("drive_restore_time","");
-        String driveRestoreStatus=syncPrefs.getString("drive_restore_status","No Drive restore recorded on this installation");
+        String driveRestoreStatus=syncPrefs.getString("drive_restore_status","Not yet confirmed");
         String localBackupTime=syncPrefs.getString("local_backup_time","");
-        StringBuilder statusText=new StringBuilder("Records on this device\\nMembers: ").append(database.count("members")).append("\\nOrganizations: ").append(database.count("organizations")).append("\\nAppointments: ").append(database.count("appointments")).append("\\nDelegations: ").append(database.count("delegations")).append("\\nVisits: ").append(database.count("visits")).append("\\nCare cases: ").append(database.count("care_records")).append("\\n\\nPending Local Changes: ").append(database.pendingChanges()).append("\\nThese are queued local record changes, not the Google Drive upload status.\\n\\nGoogle Drive backup: ").append(driveBackupStatus);
-        if(!lastDriveBackup.isEmpty()) statusText.append("\\nLast successful Drive backup: ").append(lastDriveBackup);
-        if(!lastDriveFile.isEmpty()) statusText.append("\\nFile: ").append(lastDriveFile);
-        statusText.append("\\n\\nDrive restore: ").append(driveRestoreStatus);
-        if(!lastDriveRestore.isEmpty()) statusText.append("\\nLast successful Drive restore: ").append(lastDriveRestore);
-        statusText.append("\\n\\nLocal backup: ").append(localBackupTime.isEmpty()?"No local export recorded on this installation":"Last successful export: "+localBackupTime).append("\\n\\nDrive backup is a manual snapshot; automatic multi-device synchronization is not active.");
-        TextView summary=new TextView(this); summary.setText(statusText.toString()); summary.setTextColor(ink); summary.setTextSize(15); summary.setPadding(dp(12),dp(12),dp(12),dp(12)); summary.setBackgroundColor(0xFFFFFFFF); root.addView(summary);
+        TextView summary=new TextView(this);
+        summary.setText("Backup operation status\\n\\nGoogle Drive backup: "+driveBackupStatus+(lastDriveBackup.isEmpty()?"":"\\nLast completed: "+lastDriveBackup)+"\\n\\nGoogle Drive restore: "+driveRestoreStatus+(lastDriveRestore.isEmpty()?"":"\\nLast completed: "+lastDriveRestore)+"\\n\\nLocal backup: "+(localBackupTime.isEmpty()?"Not yet confirmed": "Completed — "+localBackupTime));
+        summary.setTextColor(ink); summary.setTextSize(15); summary.setPadding(dp(12),dp(12),dp(12),dp(12)); summary.setBackgroundColor(0xFFFFFFFF); root.addView(summary);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        Cursor c=database.syncQueue(); try {while(c.moveToNext()){TextView row=new TextView(this);row.setText("#"+c.getLong(0)+" • "+c.getString(1)+" • "+c.getString(2)+"\n"+new SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.US).format(new Date(c.getLong(3)))+" • "+c.getString(4)+(c.getString(5).isEmpty()?"":"\n"+c.getString(5)));row.setTextColor(muted);row.setPadding(dp(10),dp(9),dp(10),dp(9));row.setBackgroundColor(0xFFFFFFFF);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(5);list.addView(row,p);}}finally{c.close();}
     }
 
     private void showAbout() {
