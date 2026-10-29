@@ -7,6 +7,9 @@ import android.content.Intent;
 import android.net.Uri;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -27,6 +30,11 @@ import android.widget.Toast;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 public final class MainActivity extends Activity {
     private MemberDatabase database;
@@ -442,8 +450,8 @@ public final class MainActivity extends Activity {
 
     private void showSync() {
         base("Sync queue & status","Local data remains available without internet. Cloud synchronization is not connected yet.");
-        Button exportButton=new Button(this); exportButton.setText("Export local backup"); exportButton.setAllCaps(false); exportButton.setOnClickListener(v->{ Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("application/json"); intent.putExtra(Intent.EXTRA_TITLE,"ChurchCare-backup-"+new SimpleDateFormat("yyyyMMdd-HHmm",Locale.US).format(new Date())+".json"); startActivityForResult(intent,EXPORT_BACKUP); }); root.addView(exportButton);
-        Button importButton=new Button(this); importButton.setText("Restore from backup (replaces local records)"); importButton.setAllCaps(false); importButton.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Restore ChurchCare backup?").setMessage("Restore replaces the records and change log currently stored on this device. Export a backup of the current data first if you may need it. Only choose a trusted ChurchCare JSON backup.").setNegativeButton("Cancel",null).setPositiveButton("Choose backup",(d,w)->{ Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("application/json"); intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivityForResult(intent,IMPORT_BACKUP); }).show()); root.addView(importButton);
+        Button exportButton=new Button(this); exportButton.setText("Export local backup"); exportButton.setAllCaps(false); exportButton.setOnClickListener(v->{ Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("application/zip"); intent.putExtra(Intent.EXTRA_TITLE,"ChurchCare-backup-"+new SimpleDateFormat("yyyyMMdd-HHmm",Locale.US).format(new Date())+".zip"); startActivityForResult(intent,EXPORT_BACKUP); }); root.addView(exportButton);
+        Button importButton=new Button(this); importButton.setText("Restore from backup (replaces local records)"); importButton.setAllCaps(false); importButton.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Restore ChurchCare backup?").setMessage("Restore replaces the records and change log currently stored on this device. Export a backup of the current data first if you may need it. Only choose a trusted ChurchCare JSON backup.").setNegativeButton("Cancel",null).setPositiveButton("Choose backup",(d,w)->{ Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("*/*"); intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivityForResult(intent,IMPORT_BACKUP); }).show()); root.addView(importButton);
         TextView summary=new TextView(this); summary.setText("Records on this device\nMembers: "+database.count("members")+"\nOrganizations: "+database.count("organizations")+"\nAppointments: "+database.count("appointments")+"\nDelegations: "+database.count("delegations")+"\nVisits: "+database.count("visits")+"\nCare cases: "+database.count("care_records")+"\n\nPending change events: "+database.pendingChanges()+"\n\nNo data has been uploaded. Google Drive integration must be configured and tested before synchronization can run."); summary.setTextColor(ink); summary.setTextSize(15); summary.setPadding(dp(12),dp(12),dp(12),dp(12)); root.addView(summary);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         Cursor c=database.syncQueue(); try {while(c.moveToNext()){TextView row=new TextView(this);row.setText("#"+c.getLong(0)+" • "+c.getString(1)+" • "+c.getString(2)+"\n"+new SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.US).format(new Date(c.getLong(3)))+" • "+c.getString(4)+(c.getString(5).isEmpty()?"":"\n"+c.getString(5)));row.setTextColor(muted);row.setPadding(dp(10),dp(9),dp(10),dp(9));row.setBackgroundColor(0xFFFFFFFF);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(5);list.addView(row,p);}}finally{c.close();}
@@ -455,17 +463,120 @@ public final class MainActivity extends Activity {
         catch(PackageManager.NameNotFoundException ignored){}
         new AlertDialog.Builder(this).setTitle("About ChurchCare").setMessage(version+"\n\nOffline-first church and member care. SQLite is the local source of truth.\n\nCurrent milestone: operational local records and change queue. Google Drive sync and enforced account-level access control are not yet connected.").setPositiveButton("OK",null).show();
     }
+    /** Create a portable ZIP backup and bundle the image bytes referenced by member records. */
+    private void exportBackupArchive(OutputStream destination) throws Exception {
+        JSONObject backup = database.exportBackup();
+        Map<String, byte[]> media = new HashMap<>();
+        org.json.JSONArray tables = backup.getJSONArray("tables");
+        String[] photoColumns = {"profile_photo_path", "extra_photo_one_path", "extra_photo_two_path"};
+        for (int t = 0; t < tables.length(); t++) {
+            JSONObject table = tables.getJSONObject(t);
+            if (!"members".equals(table.optString("name"))) continue;
+            org.json.JSONArray rows = table.getJSONArray("rows");
+            for (int r = 0; r < rows.length(); r++) {
+                JSONObject row = rows.getJSONObject(r);
+                String memberId = row.optString("id", "");
+                for (String column : photoColumns) {
+                    String reference = row.optString(column, "");
+                    if (reference.isEmpty() || "null".equals(reference)) continue;
+                    String entryName = "media/" + memberId + "_" + column + ".bin";
+                    byte[] imageBytes;
+                    Uri uri = Uri.parse(reference);
+                    try (InputStream imageIn = reference.startsWith("/") ? new FileInputStream(reference) : getContentResolver().openInputStream(uri);
+                         ByteArrayOutputStream imageOut = new ByteArrayOutputStream()) {
+                        if (imageIn == null) throw new java.io.IOException("A saved member photo is no longer accessible.");
+                        byte[] buf = new byte[8192]; int n;
+                        while ((n = imageIn.read(buf)) != -1) {
+                            if (imageOut.size() + n > 20 * 1024 * 1024) throw new java.io.IOException("A member photo exceeds the 20 MB safety limit.");
+                            imageOut.write(buf, 0, n);
+                        }
+                        imageBytes = imageOut.toByteArray();
+                    }
+                    media.put(entryName, imageBytes);
+                    row.put(column, "churchcare-media:" + entryName);
+                }
+            }
+        }
+        try (ZipOutputStream zip = new ZipOutputStream(destination)) {
+            zip.putNextEntry(new ZipEntry("backup.json"));
+            zip.write(backup.toString(2).getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            for (Map.Entry<String, byte[]> entry : media.entrySet()) {
+                zip.putNextEntry(new ZipEntry(entry.getKey()));
+                zip.write(entry.getValue());
+                zip.closeEntry();
+            }
+            zip.finish();
+        }
+    }
+
+    /** Validate a ZIP backup and its media references before the database transaction begins. */
+    private void restoreBackupArchive(byte[] archiveBytes) throws Exception {
+        JSONObject backup = null;
+        Map<String, File> extracted = new HashMap<>();
+        File mediaDir = new File(getFilesDir(), "restored_member_photos");
+        if (!mediaDir.exists() && !mediaDir.mkdirs()) throw new java.io.IOException("Could not prepare private photo storage.");
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(archiveBytes))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                String name = entry.getName();
+                if ("backup.json".equals(name)) {
+                    ByteArrayOutputStream json = new ByteArrayOutputStream();
+                    byte[] buf = new byte[8192]; int n;
+                    while ((n = zip.read(buf)) != -1) {
+                        if (json.size() + n > 20 * 1024 * 1024) throw new java.io.IOException("Backup data file is too large.");
+                        json.write(buf, 0, n);
+                    }
+                    backup = new JSONObject(new String(json.toByteArray(), StandardCharsets.UTF_8));
+                } else if (name.startsWith("media/")) {
+                    String filename = name.substring("media/".length());
+                    if (!filename.matches("[A-Za-z0-9_-]+\\.bin")) throw new java.io.IOException("Backup contains an unsafe media filename.");
+                    File target = new File(mediaDir, filename);
+                    try (FileOutputStream fileOut = new FileOutputStream(target)) {
+                        byte[] buf = new byte[8192]; int n; int total = 0;
+                        while ((n = zip.read(buf)) != -1) {
+                            total += n;
+                            if (total > 20 * 1024 * 1024) throw new java.io.IOException("A bundled photo exceeds the 20 MB safety limit.");
+                            fileOut.write(buf, 0, n);
+                        }
+                    }
+                    extracted.put("media/" + filename, target);
+                }
+                zip.closeEntry();
+            }
+        }
+        if (backup == null) throw new java.io.IOException("This ZIP does not contain a ChurchCare backup.");
+        org.json.JSONArray tables = backup.getJSONArray("tables");
+        for (int t = 0; t < tables.length(); t++) {
+            JSONObject table = tables.getJSONObject(t);
+            if (!"members".equals(table.optString("name"))) continue;
+            org.json.JSONArray rows = table.getJSONArray("rows");
+            String[] columns = {"profile_photo_path", "extra_photo_one_path", "extra_photo_two_path"};
+            for (int r = 0; r < rows.length(); r++) {
+                JSONObject row = rows.getJSONObject(r);
+                for (String column : columns) {
+                    String value = row.optString(column, "");
+                    if (!value.startsWith("churchcare-media:")) continue;
+                    String entryName = value.substring("churchcare-media:".length());
+                    File file = extracted.get(entryName);
+                    if (file == null || !file.isFile()) throw new java.io.IOException("A referenced member photo is missing from the backup.");
+                    row.put(column, Uri.fromFile(file).toString());
+                }
+            }
+        }
+        database.restoreBackup(backup);
+    }
+
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
         if (resultCode == RESULT_OK && data != null && data.getData() != null && requestCode == EXPORT_BACKUP) {
             try (OutputStream out = getContentResolver().openOutputStream(data.getData(), "w")) {
                 if (out == null) throw new java.io.IOException("Could not open backup destination.");
-                byte[] bytes = database.exportBackup().toString(2).getBytes(StandardCharsets.UTF_8);
-                out.write(bytes); out.flush();
-                Toast.makeText(this, "Backup exported successfully. Keep the file somewhere safe.", Toast.LENGTH_LONG).show();
+                exportBackupArchive(out);
+                Toast.makeText(this, "Backup exported with available member photos. Keep the file somewhere safe.", Toast.LENGTH_LONG).show();
             } catch (Exception e) {
                 android.util.Log.e("ChurchCare", "Backup export failed", e);
-                Toast.makeText(this, "Backup export failed. Your current records were not changed.", Toast.LENGTH_LONG).show();
+                new AlertDialog.Builder(this).setTitle("Backup export failed").setMessage("ChurchCare could not complete the backup. Check that saved photos are still accessible and choose a writable destination. Your records were not changed.").setPositiveButton("OK", null).show();
             }
             return;
         }
@@ -473,14 +584,23 @@ public final class MainActivity extends Activity {
             try (InputStream in = getContentResolver().openInputStream(data.getData()); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
                 if (in == null) throw new java.io.IOException("Could not open selected backup.");
                 byte[] buffer = new byte[8192]; int count;
-                while ((count = in.read(buffer)) != -1) bytes.write(buffer, 0, count);
-                JSONObject backup = new JSONObject(new String(bytes.toByteArray(), StandardCharsets.UTF_8));
-                database.restoreBackup(backup);
+                while ((count = in.read(buffer)) != -1) {
+                    if (bytes.size() + count > 100 * 1024 * 1024) throw new java.io.IOException("Backup exceeds the 100 MB safety limit.");
+                    bytes.write(buffer, 0, count);
+                }
+                byte[] raw = bytes.toByteArray();
+                String prefix = new String(raw, 0, Math.min(raw.length, 32), StandardCharsets.UTF_8).trim();
+                if (prefix.startsWith("{")) {
+                    // Backward compatibility with the earlier JSON-only backup format.
+                    database.restoreBackup(new JSONObject(new String(raw, StandardCharsets.UTF_8)));
+                } else {
+                    restoreBackupArchive(raw);
+                }
                 Toast.makeText(this, "Backup restored. Review your records before continuing.", Toast.LENGTH_LONG).show();
                 showHome();
             } catch (Exception e) {
                 android.util.Log.e("ChurchCare", "Backup restore failed", e);
-                new AlertDialog.Builder(this).setTitle("Restore failed").setMessage("ChurchCare could not restore this file. The current database should remain unchanged if validation or the restore transaction failed. Details: " + e.getClass().getSimpleName()).setPositiveButton("OK", null).show();
+                new AlertDialog.Builder(this).setTitle("Restore failed").setMessage("ChurchCare could not restore this file. Your current database should remain unchanged if validation or the restore transaction failed. Details: " + e.getClass().getSimpleName()).setPositiveButton("OK", null).show();
             }
             return;
         }
