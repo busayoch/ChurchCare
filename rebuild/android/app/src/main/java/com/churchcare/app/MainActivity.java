@@ -234,6 +234,13 @@ public final class MainActivity extends Activity {
                     values.put(fields[i].key,value);
                 }
                 applyRelationships(table,values);
+                if (table.equals("organizations")) {
+                    String proposedParentId = values.getAsString("parent_id");
+                    if (database.wouldCreateOrganizationCycle(editId, proposedParentId)) {
+                        Toast.makeText(this, "That parent would create a circular organization hierarchy. Choose a different parent.", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                }
                 try {
                     if(editId==null) {
                         if(table.equals("appointments") && "Current".equalsIgnoreCase(values.getAsString("status")))
