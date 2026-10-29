@@ -193,6 +193,23 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         for (String id : ids) softDelete("visits", id);
     }
 
+    /** Reject a proposed parent if it is the organization itself or one of its descendants. */
+    public boolean wouldCreateOrganizationCycle(String organizationId, String proposedParentId) {
+        if (proposedParentId == null || proposedParentId.trim().isEmpty()) return false;
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        String current = proposedParentId;
+        while (current != null && !current.trim().isEmpty()) {
+            if (current.equals(organizationId)) return true;
+            if (!seen.add(current)) return true; // Existing corruption: fail closed.
+            try (Cursor c = getReadableDatabase().query("organizations", new String[]{"parent_id"},
+                    "id=? AND deleted=0", new String[]{current}, null, null, null, "1")) {
+                if (!c.moveToFirst() || c.isNull(0)) return false;
+                current = c.getString(0);
+            }
+        }
+        return false;
+    }
+
     public String organizationPath(String id) {
         if (id == null || id.isEmpty()) return "";
         java.util.ArrayList<String> names = new java.util.ArrayList<>();
