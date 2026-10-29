@@ -193,6 +193,38 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         for (String id : ids) softDelete("visits", id);
     }
 
+    public String organizationPath(String id) {
+        if (id == null || id.isEmpty()) return "";
+        java.util.ArrayList<String> names = new java.util.ArrayList<>();
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        String current = id;
+        while (current != null && !current.isEmpty() && seen.add(current) && names.size() < 20) {
+            String parent = null;
+            try (Cursor c = getReadableDatabase().query("organizations", new String[]{"name","parent_id"}, "id=? AND deleted=0", new String[]{current}, null, null, null, "1")) {
+                if (!c.moveToFirst()) break;
+                names.add(c.getString(0));
+                parent = c.isNull(1) ? null : c.getString(1);
+            }
+            current = parent;
+        }
+        java.util.Collections.reverse(names);
+        StringBuilder path = new StringBuilder();
+        for (String name : names) { if (path.length() > 0) path.append(" › "); path.append(name); }
+        return path.toString();
+    }
+
+    public void closeCurrentAppointments(String personName, String newStartDate) {
+        SQLiteDatabase db = getWritableDatabase();
+        java.util.ArrayList<String> ids = new java.util.ArrayList<>();
+        try (Cursor c = db.query("appointments", new String[]{"id"}, "deleted=0 AND person_name=? COLLATE NOCASE AND status='Current'", new String[]{personName.trim()}, null, null, null)) {
+            while (c.moveToNext()) ids.add(c.getString(0));
+        }
+        for (String id : ids) {
+            ContentValues v = new ContentValues(); v.put("end_date", newStartDate); v.put("status", "Completed");
+            updateRecord("appointments", id, v);
+        }
+    }
+
     public String findNameById(String table, String id) {
         checkTable(table);
         String column = table.equals("organizations") ? "name" : table.equals("members") ? "full_name" : "id";
