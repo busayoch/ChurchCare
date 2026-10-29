@@ -222,7 +222,11 @@ public final class MainActivity extends Activity {
                 String parentId=existing.getAsString("parent_id");
                 if(parentId!=null&&!parentId.isEmpty()) e.setText(database.findNameById("organizations",parentId));
             }
-            if (isRelationshipField(table, f.key)) configureRelationshipPicker(table, f.key, e);
+            if (isRelationshipField(table, f.key)) {
+                String foreignKey = relationshipForeignKey(table, f.key);
+                if (existing != null && foreignKey != null) e.setTag(existing.getAsString(foreignKey));
+                configureRelationshipPicker(table, f.key, e);
+            }
             LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(4); form.addView(e,p); inputs[i]=e;
         }
         new AlertDialog.Builder(this).setTitle((editId==null?"Add ":"Edit ")+singular(table)).setView(sc)
@@ -234,6 +238,7 @@ public final class MainActivity extends Activity {
                     values.put(fields[i].key,value);
                 }
                 applyRelationships(table,values);
+                if (!applySelectedRelationshipIds(table, fields, inputs, values)) return;
                 if (table.equals("organizations")) {
                     String proposedParentId = values.getAsString("parent_id");
                     if (database.wouldCreateOrganizationCycle(editId, proposedParentId)) {
@@ -274,7 +279,12 @@ public final class MainActivity extends Activity {
                     String name = get(cursor, displayColumn);
                     if (!name.trim().isEmpty()) {
                         ids.add(id);
-                        labels.add(sourceTable.equals("organizations") ? join(database.organizationPath(id), get(cursor, "type")) : name);
+                        String label = sourceTable.equals("organizations")
+                            ? join(database.organizationPath(id), get(cursor, "type"))
+                            : (get(cursor, "phone").trim().isEmpty() ? name : name + " • " + get(cursor, "phone"));
+                        if (sourceTable.equals("organizations") && ownerTable.equals("organizations")
+                                && id.equals(String.valueOf(field.getTag()))) continue;
+                        labels.add(label);
                     }
                 }
             }
@@ -290,7 +300,11 @@ public final class MainActivity extends Activity {
             }
             String[] options = labels.toArray(new String[0]);
             new AlertDialog.Builder(this).setTitle("Select " + (sourceTable.equals("organizations") ? "church organization" : "member"))
-                .setItems(options, (dialog, which) -> field.setText(which == 0 && sourceTable.equals("organizations") && ownerTable.equals("organizations") ? "" : getLabelName(sourceTable, ids.get(which))))
+                .setItems(options, (dialog, which) -> {
+                    String selectedId = ids.get(which);
+                    field.setTag(selectedId);
+                    field.setText(selectedId.isEmpty() ? "" : getLabelName(sourceTable, selectedId));
+                })
                 .setNegativeButton("Cancel", null).show();
         });
         field.setHint(field.getHint() + " — tap to select");
@@ -298,6 +312,39 @@ public final class MainActivity extends Activity {
 
     private String getLabelName(String table, String id) {
         return database.findNameById(table, id);
+    }
+
+    private String relationshipForeignKey(String table, String key) {
+        if (table.equals("organizations") && key.equals("parent_name")) return "parent_id";
+        if (table.equals("members") && key.equals("organization")) return "organization_id";
+        if ((table.equals("appointments") || table.equals("delegations")) && key.equals("organization_name")) return "organization_id";
+        if ((table.equals("visits") || table.equals("care_records")) && key.equals("member_name")) return "member_id";
+        return null;
+    }
+
+    /** Save the exact selected record IDs instead of resolving potentially duplicate names. */
+    private boolean applySelectedRelationshipIds(String table, Field[] fields, EditText[] inputs, ContentValues values) {
+        for (int i = 0; i < fields.length; i++) {
+            String key = fields[i].key;
+            if (!isRelationshipField(table, key)) continue;
+            String foreignKey = relationshipForeignKey(table, key);
+            String selectedId = inputs[i].getTag() == null ? null : String.valueOf(inputs[i].getTag());
+            String display = inputs[i].getText().toString().trim();
+            if (selectedId == null && !display.isEmpty()) {
+                Toast.makeText(this, "Please select the linked record from the picker so ChurchCare can save the correct record ID.", Toast.LENGTH_LONG).show();
+                return false;
+            }
+            if ((table.equals("visits") || table.equals("care_records")) && key.equals("member_name")
+                    && (selectedId == null || selectedId.isEmpty())) {
+                Toast.makeText(this, "Please select a member from the list.", Toast.LENGTH_LONG).show();
+                return false;
+            }
+            if (foreignKey != null) {
+                if (selectedId == null || selectedId.isEmpty()) values.putNull(foreignKey);
+                else values.put(foreignKey, selectedId);
+            }
+        }
+        return true;
     }
 
     private void applyRelationships(String table,ContentValues v) {
