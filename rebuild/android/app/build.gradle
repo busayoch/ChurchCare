@@ -13,5 +13,6 @@ android {
 }
 
 dependencies {
-    implementation 'com.google.android.gms:play-services-auth:22.0.0'
+    // 22.0.0 requires API 24; keep ChurchCare's existing API 23 minimum.
+    implementation 'com.google.android.gms:play-services-auth:21.2.0'
 }
