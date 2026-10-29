@@ -222,6 +222,7 @@ public final class MainActivity extends Activity {
                 String parentId=existing.getAsString("parent_id");
                 if(parentId!=null&&!parentId.isEmpty()) e.setText(database.findNameById("organizations",parentId));
             }
+            if (isRelationshipField(table, f.key)) configureRelationshipPicker(table, f.key, e);
             LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(4); form.addView(e,p); inputs[i]=e;
         }
         new AlertDialog.Builder(this).setTitle((editId==null?"Add ":"Edit ")+singular(table)).setView(sc)
@@ -243,6 +244,53 @@ public final class MainActivity extends Activity {
                     Toast.makeText(this,"Saved on this device",Toast.LENGTH_SHORT).show(); showRecords(table);
                 } catch(Exception e){android.util.Log.e("ChurchCare","Save failed",e);Toast.makeText(this,"Could not save. Check the details and try again.",Toast.LENGTH_LONG).show();}
             }).show();
+    }
+
+    private boolean isRelationshipField(String table, String key) {
+        return (table.equals("organizations") && key.equals("parent_name"))
+            || (table.equals("members") && key.equals("organization"))
+            || ((table.equals("appointments") || table.equals("delegations")) && key.equals("organization_name"))
+            || ((table.equals("visits") || table.equals("care_records")) && key.equals("member_name"));
+    }
+
+    private void configureRelationshipPicker(String ownerTable, String key, EditText field) {
+        String sourceTable = (key.equals("parent_name") || key.equals("organization") || key.equals("organization_name")) ? "organizations" : "members";
+        String displayColumn = sourceTable.equals("organizations") ? "name" : "full_name";
+        field.setFocusable(false);
+        field.setClickable(true);
+        field.setOnClickListener(v -> {
+            java.util.ArrayList<String> labels = new java.util.ArrayList<>();
+            java.util.ArrayList<String> ids = new java.util.ArrayList<>();
+            try (Cursor cursor = database.listRecords(sourceTable)) {
+                while (cursor.moveToNext()) {
+                    String id = get(cursor, "id");
+                    String name = get(cursor, displayColumn);
+                    if (!name.trim().isEmpty()) {
+                        ids.add(id);
+                        labels.add(sourceTable.equals("organizations") ? join(database.organizationPath(id), get(cursor, "type")) : name);
+                    }
+                }
+            }
+            if (sourceTable.equals("organizations") && ownerTable.equals("organizations")) {
+                labels.add(0, "No parent (top level)");
+                ids.add(0, "");
+            }
+            if (labels.isEmpty()) {
+                new AlertDialog.Builder(this).setTitle("No records available")
+                    .setMessage("Add the required " + (sourceTable.equals("organizations") ? "church organization" : "member") + " first, then return here.")
+                    .setPositiveButton("OK", null).show();
+                return;
+            }
+            String[] options = labels.toArray(new String[0]);
+            new AlertDialog.Builder(this).setTitle("Select " + (sourceTable.equals("organizations") ? "church organization" : "member"))
+                .setItems(options, (dialog, which) -> field.setText(which == 0 && sourceTable.equals("organizations") && ownerTable.equals("organizations") ? "" : getLabelName(sourceTable, ids.get(which))))
+                .setNegativeButton("Cancel", null).show();
+        });
+        field.setHint(field.getHint() + " — tap to select");
+    }
+
+    private String getLabelName(String table, String id) {
+        return database.findNameById(table, id);
     }
 
     private void applyRelationships(String table,ContentValues v) {
