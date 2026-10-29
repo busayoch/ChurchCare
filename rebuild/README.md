@@ -15,7 +15,8 @@ The Android app uses a local SQLite database as its operational source of truth.
 - Visit records and follow-up dates, retaining at most the five newest visit records per member.
 - Care cases with category, priority, status, assignment, due date, details, and resolution.
 - Durable change log for create/update/delete events, including soft-delete tombstones.
-- Sync queue screen and Settings/About.\n- Export/import of a full local JSON backup using Android's document picker. Restore validates the backup and replaces the local records in a single SQLite transaction.
+- Sync queue screen and Settings/About.
+- Export/import of a full local JSON backup using Android's document picker. Restore validates the backup and replaces the local records in a single SQLite transaction.
 - Profile thumbnail and two additional photo URI slots. All photo references are stored locally; extra photos are explicitly local-only.
 
 ## Important limits — not yet a complete production system
