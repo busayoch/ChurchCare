@@ -214,7 +214,7 @@ public final class MainActivity extends Activity {
         for(int i=0;i<fields.length;i++){
             Field f=fields[i]; EditText e=new EditText(this); e.setHint(f.label+(f.required?" *":"")); e.setInputType(f.type); e.setSingleLine(false); e.setMinLines(1);
             if(f.key.equals("visit_date")||f.key.equals("opened_date")) e.setText(today());
-            if(f.key.equals("status")) e.setText(table.equals("members")||table.equals("appointments")?"Active":table.equals("care_records")?"Open":"Active");
+            if(f.key.equals("status")) e.setText(table.equals("appointments")?"Current":table.equals("members")?"Active":table.equals("care_records")?"Open":"Active");
             if(f.key.equals("priority")) e.setText("Normal");
             if(f.key.equals("scope")) e.setText("View and record care");
             if(existing!=null && existing.containsKey(f.key)) e.setText(existing.getAsString(f.key));
@@ -234,7 +234,11 @@ public final class MainActivity extends Activity {
                 }
                 applyRelationships(table,values);
                 try {
-                    if(editId==null) database.insertRecord(table,values); else database.updateRecord(table,editId,values);
+                    if(editId==null) {
+                        if(table.equals("appointments") && "Current".equalsIgnoreCase(values.getAsString("status")))
+                            database.closeCurrentAppointments(values.getAsString("person_name"),values.getAsString("start_date"));
+                        database.insertRecord(table,values);
+                    } else database.updateRecord(table,editId,values);
                     if(table.equals("visits")) database.trimVisits(values.getAsString("member_name"));
                     Toast.makeText(this,"Saved on this device",Toast.LENGTH_SHORT).show(); showRecords(table);
                 } catch(Exception e){android.util.Log.e("ChurchCare","Save failed",e);Toast.makeText(this,"Could not save. Check the details and try again.",Toast.LENGTH_LONG).show();}
@@ -284,7 +288,7 @@ public final class MainActivity extends Activity {
     }
     private String recordTitle(String table,Cursor c) {
         if(table.equals("members"))return get(c,"full_name");
-        if(table.equals("organizations"))return get(c,"name")+" • "+get(c,"type");
+        if(table.equals("organizations"))return join(database.organizationPath(get(c,"id")),get(c,"type"));
         if(table.equals("appointments"))return get(c,"person_name")+" • "+get(c,"role");
         if(table.equals("delegations"))return get(c,"overseer")+" → "+get(c,"delegate_name");
         if(table.equals("visits"))return get(c,"member_name")+" • "+get(c,"visit_date");
@@ -292,7 +296,7 @@ public final class MainActivity extends Activity {
     }
     private String recordTitle(String table,ContentValues v) {
         if(table.equals("members"))return safe(v,"full_name");
-        if(table.equals("organizations"))return safe(v,"name")+" • "+safe(v,"type");
+        if(table.equals("organizations"))return join(database.organizationPath(safe(v,"id")),safe(v,"type"));
         if(table.equals("appointments"))return safe(v,"person_name")+" • "+safe(v,"role");
         if(table.equals("delegations"))return safe(v,"overseer")+" → "+safe(v,"delegate_name");
         if(table.equals("visits"))return safe(v,"member_name")+" • "+safe(v,"visit_date");
@@ -300,7 +304,7 @@ public final class MainActivity extends Activity {
     }
     private String recordDetail(String table,Cursor c) {
         if(table.equals("members"))return join(get(c,"phone"),get(c,"organization"),get(c,"status"),get(c,"address"));
-        if(table.equals("organizations"))return join("Parent ID: "+get(c,"parent_id"),get(c,"location"),get(c,"notes"));
+        if(table.equals("organizations"))return join(get(c,"parent_id").isEmpty()?"Top-level organization":"Parent: "+database.findNameById("organizations",get(c,"parent_id")),get(c,"location"),get(c,"notes"));
         if(table.equals("appointments"))return join(get(c,"organization_id"),get(c,"start_date")+" → "+(get(c,"end_date").isEmpty()?"Current":get(c,"end_date")),get(c,"status"),get(c,"notes"));
         if(table.equals("delegations"))return join("Scope: "+get(c,"scope"),"Organization ID: "+get(c,"organization_id"),get(c,"status"),get(c,"start_date")+" → "+get(c,"end_date"));
         if(table.equals("visits"))return join("Visitor: "+get(c,"visitor"),"Outcome: "+get(c,"outcome"),"Follow-up: "+get(c,"next_follow_up"),get(c,"notes"));
@@ -311,7 +315,7 @@ public final class MainActivity extends Activity {
             safe(v,"profile_photo_path").isEmpty()?"":"Profile thumbnail saved",
             safe(v,"extra_photo_one_path").isEmpty()?"":"Local photo 1 saved",
             safe(v,"extra_photo_two_path").isEmpty()?"":"Local photo 2 saved");
-        if(table.equals("organizations"))return join("Parent ID: "+safe(v,"parent_id"),safe(v,"location"),safe(v,"notes"));
+        if(table.equals("organizations"))return join(safe(v,"parent_id").isEmpty()?"Top-level organization":"Parent: "+database.findNameById("organizations",safe(v,"parent_id")),safe(v,"location"),safe(v,"notes"));
         if(table.equals("appointments"))return join(safe(v,"organization_id"),safe(v,"start_date")+" → "+(safe(v,"end_date").isEmpty()?"Current":safe(v,"end_date")),safe(v,"status"),safe(v,"notes"));
         if(table.equals("delegations"))return join("Scope: "+safe(v,"scope"),"Organization ID: "+safe(v,"organization_id"),safe(v,"status"),safe(v,"start_date")+" → "+safe(v,"end_date"));
         if(table.equals("visits"))return join("Visitor: "+safe(v,"visitor"),"Outcome: "+safe(v,"outcome"),"Follow-up: "+safe(v,"next_follow_up"),safe(v,"notes"));
