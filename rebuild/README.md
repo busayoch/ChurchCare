@@ -1,25 +1,39 @@
-# ChurchCare clean Android foundation
+# ChurchCare clean Android rebuild
 
-This directory is the isolated, from-the-ground-up Android implementation. It is deliberately on the `rebuild/clean-android-foundation` branch; the existing `main` branch and its source ZIP workflow are left untouched.
+This is the isolated native Android implementation on `rebuild/clean-android-foundation`. The `main` branch has not been merged or replaced.
 
-## First milestone
+## Current implementation milestone
 
-- Native Java Android app, package identity `com.churchcare.app`.
-- Offline-first SQLite member storage.
-- Stable UUID member IDs.
-- Local change log records member creation for a future synchronization engine.
-- Simple member list, add-member flow, and About/version dialog.
-- No network permissions or cloud dependency in this first milestone.
-- Non-destructive migration policy: future schema upgrades must preserve data.
+The Android app uses a local SQLite database as its operational source of truth. It is intended to remain usable without an internet connection.
 
-## Not yet implemented
+### Available screens and local workflows
+- Dashboard with local record counts.
+- Member register, search, edit, archive, and local photo selection.
+- Configurable organization units with parent relationships and readable hierarchy paths.
+- Pastoral appointments; adding a new current appointment closes the previous current appointment while preserving its history.
+- Explicit overseer-to-delegate records with scope, dates, and status.
+- Visit records and follow-up dates, retaining at most the five newest visit records per member.
+- Care cases with category, priority, status, assignment, due date, details, and resolution.
+- Durable change log for create/update/delete events, including soft-delete tombstones.
+- Sync queue screen and Settings/About.
+- Profile thumbnail and two additional photo URI slots. All photo references are stored locally; extra photos are explicitly local-only.
 
-This is a foundation milestone, not the complete ChurchCare product. Organization hierarchy, appointments/transfers, delegation and scoped permissions, visits and the five-visit retention rule, care follow-ups, photo handling, and actual cloud synchronization still need implementation and tests. The local change log is groundwork only; it does not claim that synchronization is operational.
+## Important limits — not yet a complete production system
 
-## Build and verification
+- Google Drive authentication and actual cloud synchronization are **not connected**. The queue records changes for a future sync engine; it does not upload anything yet.
+- Account login, role verification, and enforced per-user/branch authorization are **not connected**. Delegation scope is recorded but cannot yet secure data between different users/devices.
+- The clean foundation has not yet completed an automated emulator launch or end-to-end UI test. A successful APK compilation does not establish runtime correctness.
+- The user-provided ChurchCare Community Emblem still needs to be installed as the actual launcher/adaptive icon on this branch.
+- Photo references are stored as local document URIs. A future sync implementation must upload only the profile thumbnail by default and must never automatically upload the two additional photos.
 
-The dedicated GitHub Actions workflow compiles this source separately and uploads a debug APK. A successful compile does not prove runtime stability; install and launch verification on a real Android device or a working emulator remains required before this can be considered a stable release.
+## Data safety and migrations
 
-## Data safety
+Schema upgrades are additive. Existing member records are retained when the schema version advances; records are archived using a deleted/tombstone state rather than immediately removed. Visit retention is enforced when a new visit is saved.
 
-Do not uninstall the existing app or replace the current production/checkpoint build as part of evaluating this experimental foundation. The new app deliberately keeps the same application ID for continuity, so install/upgrade testing should be done only after version/signing and data migration strategy are confirmed.
+## Build
+
+GitHub Actions workflow: [ChurchCare Clean Foundation Build](../.github/workflows/churchcare-foundation-build.yml)
+
+Build command in the workflow: `gradle --no-daemon --stacktrace :app:assembleDebug` from `rebuild/android`.
+
+Do not call a build verified until the latest workflow run has succeeded. Runtime behavior must also be tested on a device before release.
