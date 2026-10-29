@@ -5,6 +5,9 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -252,6 +255,97 @@ public final class MemberDatabase extends SQLiteOpenHelper {
 
     public Cursor syncQueue() {
         return getReadableDatabase().rawQuery("SELECT sequence,entity_type,operation,created_at,sync_state,last_error FROM change_log ORDER BY sequence DESC LIMIT 100", null);
+    }
+
+    /** Export a complete logical backup, including archived rows and the durable change log. */
+    public JSONObject exportBackup() throws JSONException {
+        SQLiteDatabase db = getReadableDatabase();
+        JSONObject backup = new JSONObject();
+        backup.put("format", "ChurchCare-Local-Backup");
+        backup.put("schema_version", DB_VERSION);
+        backup.put("exported_at", System.currentTimeMillis());
+        JSONArray tables = new JSONArray();
+        for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log"}) {
+            JSONObject tableObject = new JSONObject();
+            tableObject.put("name", table);
+            JSONArray rows = new JSONArray();
+            try (Cursor c = db.query(table, null, null, null, null, null, null)) {
+                while (c.moveToNext()) {
+                    JSONObject row = new JSONObject();
+                    for (int i = 0; i < c.getColumnCount(); i++) {
+                        String column = c.getColumnName(i);
+                        switch (c.getType(i)) {
+                            case Cursor.FIELD_TYPE_INTEGER: row.put(column, c.getLong(i)); break;
+                            case Cursor.FIELD_TYPE_FLOAT: row.put(column, c.getDouble(i)); break;
+                            case Cursor.FIELD_TYPE_STRING: row.put(column, c.getString(i)); break;
+                            default: row.put(column, JSONObject.NULL); break;
+                        }
+                    }
+                    rows.put(row);
+                }
+            }
+            tableObject.put("rows", rows);
+            tables.put(tableObject);
+        }
+        backup.put("tables", tables);
+        return backup;
+    }
+
+    /**
+     * Restore a previously exported backup as one SQLite transaction.
+     * The input is validated before any current records are removed.
+     */
+    public void restoreBackup(JSONObject backup) throws JSONException {
+        if (!"ChurchCare-Local-Backup".equals(backup.optString("format"))
+                || backup.optInt("schema_version", -1) < 1
+                || !(backup.opt("tables") instanceof JSONArray)) {
+            throw new JSONException("This is not a valid ChurchCare backup.");
+        }
+        JSONArray tableArray = backup.getJSONArray("tables");
+        java.util.HashMap<String, JSONArray> incoming = new java.util.HashMap<>();
+        for (int i = 0; i < tableArray.length(); i++) {
+            JSONObject tableObject = tableArray.getJSONObject(i);
+            String name = tableObject.optString("name", "");
+            if (!Arrays.asList("members","organizations","appointments","delegations","visits","care_records","change_log").contains(name)
+                    || !(tableObject.opt("rows") instanceof JSONArray) || incoming.containsKey(name)) {
+                throw new JSONException("The backup contains an invalid or duplicate table.");
+            }
+            incoming.put(name, tableObject.getJSONArray("rows"));
+        }
+        for (String required : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log"}) {
+            if (!incoming.containsKey(required)) throw new JSONException("The backup is incomplete: " + required);
+        }
+
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            for (String table : new String[]{"change_log","visits","care_records","appointments","delegations","members","organizations"}) {
+                db.delete(table, null, null);
+            }
+            for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log"}) {
+                JSONArray rows = incoming.get(table);
+                for (int i = 0; i < rows.length(); i++) {
+                    JSONObject row = rows.getJSONObject(i);
+                    ContentValues values = new ContentValues();
+                    java.util.Iterator<String> keys = row.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        Object value = row.get(key);
+                        if (value == JSONObject.NULL) values.putNull(key);
+                        else if (value instanceof String) values.put(key, (String)value);
+                        else if (value instanceof Integer) values.put(key, (Integer)value);
+                        else if (value instanceof Long) values.put(key, (Long)value);
+                        else if (value instanceof Double) values.put(key, (Double)value);
+                        else if (value instanceof Boolean) values.put(key, (Boolean)value);
+                        else throw new JSONException("Unsupported value in backup.");
+                    }
+                    db.insertOrThrow(table, null, values);
+                }
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
     }
 
     private void checkTable(String table) {
