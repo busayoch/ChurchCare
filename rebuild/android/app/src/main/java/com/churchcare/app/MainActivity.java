@@ -32,7 +32,9 @@ public final class MainActivity extends Activity {
     private MemberDatabase database;
     private LinearLayout root;
     private int blue = 0xFF0B4F85, ink = 0xFF172B3A, muted = 0xFF526273, paper = 0xFFF4F7FA;
-    private static final int PICK_MEMBER_PHOTO = 7104;\n    private static final int EXPORT_BACKUP = 7105;\n    private static final int IMPORT_BACKUP = 7106;
+    private static final int PICK_MEMBER_PHOTO = 7104;
+    private static final int EXPORT_BACKUP = 7105;
+    private static final int IMPORT_BACKUP = 7106;
     private String photoRecordId;
     private String photoColumn;
 
