@@ -16,16 +16,16 @@ The Android app uses a local SQLite database as its operational source of truth.
 - Care cases with category, priority, status, assignment, due date, details, and resolution.
 - Durable change log for create/update/delete events, including soft-delete tombstones.
 - Sync queue screen and Settings/About.
-- Export/import of a full local JSON backup using Android's document picker. Restore validates the backup and replaces the local records in a single SQLite transaction.
+- Export/import of a portable ZIP backup using Android's document picker. The archive contains the full local JSON database plus copies of accessible member profile and extra-photo files. Restore validates the archive and replaces the local records in a single SQLite transaction. Older JSON-only backups remain supported.
 - Profile thumbnail and two additional photo URI slots. All photo references are stored locally; extra photos are explicitly local-only.
 
 ## Important limits — not yet a complete production system
 
-- Google Drive authentication and actual cloud synchronization are **not connected**. The local backup feature is manual file export/import, not cloud sync. Photo references are included as URI strings; the photo files themselves are not bundled into the JSON backup. The queue records changes for a future sync engine; it does not upload anything yet.
+- Google Drive account authentication and automatic cloud synchronization are **not connected**. Manual ZIP export/import can use any location exposed by Android's document picker, including Google Drive when its provider is available, but this is still a user-managed file backup rather than multi-device sync. ZIP backups bundle accessible profile and extra-photo files; older JSON-only backups contain photo references but not the image bytes. The queue records changes for a future sync engine; it does not upload anything yet.
 - Account login, role verification, and enforced per-user/branch authorization are **not connected**. Delegation scope is recorded but cannot yet secure data between different users/devices.
 - The clean foundation has not yet completed an automated emulator launch or end-to-end UI test. A successful APK compilation does not establish runtime correctness.
-- The user-provided ChurchCare Community Emblem still needs to be installed as the actual launcher/adaptive icon on this branch.
-- Photo references are stored as local document URIs. A future sync implementation must upload only the profile thumbnail by default and must never automatically upload the two additional photos.
+- The ChurchCare Community Emblem is configured as the launcher icon. A polished adaptive icon with separately generated foreground/background assets can be refined later.
+- Photo references are stored as local document URIs. ZIP export copies accessible referenced images into the local archive. A future cloud-sync implementation must upload only the profile thumbnail by default and must never automatically upload the two additional photos.
 
 ## Data safety and migrations
 
