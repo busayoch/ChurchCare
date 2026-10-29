@@ -3,6 +3,8 @@ package com.churchcare.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentValues;
+import android.content.Intent;
+import android.net.Uri;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -25,6 +27,9 @@ public final class MainActivity extends Activity {
     private MemberDatabase database;
     private LinearLayout root;
     private int blue = 0xFF0B4F85, ink = 0xFF172B3A, muted = 0xFF526273, paper = 0xFFF4F7FA;
+    private static final int PICK_MEMBER_PHOTO = 7104;
+    private String photoRecordId;
+    private String photoColumn;
 
     private static final class Field {
         final String label, key; final int type; final boolean required;
@@ -184,11 +189,20 @@ public final class MainActivity extends Activity {
     }
 
     private void showRecordActions(String table,String id,ContentValues data) {
-        String[] actions={"View details","Edit record","Archive record"};
+        String[] actions=table.equals("members")
+            ? new String[]{"View details","Edit record","Archive record","Choose profile thumbnail","Choose additional photo 1 (local only)","Choose additional photo 2 (local only)"}
+            : new String[]{"View details","Edit record","Archive record"};
         new AlertDialog.Builder(this).setTitle(recordTitle(table,data)).setItems(actions,(d,which)->{
-            if(which==0) new AlertDialog.Builder(this).setTitle(recordTitle(table,data)).setMessage(recordDetail(table,data)+"\n\n"+allDetails(data)).setPositiveButton("Close",null).show();
+            if(which==0) new AlertDialog.Builder(this).setTitle(recordTitle(table,data)).setMessage(recordDetail(table,data)+"\\n\\n"+allDetails(data)).setPositiveButton("Close",null).show();
             else if(which==1) showForm(table,id,data);
-            else new AlertDialog.Builder(this).setTitle("Archive record?").setMessage("This hides the record from normal lists and records the deletion for future synchronization.").setNegativeButton("Cancel",null).setPositiveButton("Archive",(x,w)->{database.softDelete(table,id);showRecords(table);Toast.makeText(this,"Record archived",Toast.LENGTH_SHORT).show();}).show();
+            else if(which==2) new AlertDialog.Builder(this).setTitle("Archive record?").setMessage("This hides the record from normal lists and records the deletion for future synchronization.").setNegativeButton("Cancel",null).setPositiveButton("Archive",(x,w)->{database.softDelete(table,id);showRecords(table);Toast.makeText(this,"Record archived",Toast.LENGTH_SHORT).show();}).show();
+            else if(table.equals("members")) {
+                photoRecordId=id;
+                photoColumn=which==3?"profile_photo_path":which==4?"extra_photo_one_path":"extra_photo_two_path";
+                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("image/*");
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+                startActivityForResult(intent,PICK_MEMBER_PHOTO);
+            }
         }).show();
     }
 
@@ -204,6 +218,10 @@ public final class MainActivity extends Activity {
             if(f.key.equals("priority")) e.setText("Normal");
             if(f.key.equals("scope")) e.setText("View and record care");
             if(existing!=null && existing.containsKey(f.key)) e.setText(existing.getAsString(f.key));
+            if(existing!=null && table.equals("organizations") && f.key.equals("parent_name")) {
+                String parentId=existing.getAsString("parent_id");
+                if(parentId!=null&&!parentId.isEmpty()) e.setText(database.findNameById("organizations",parentId));
+            }
             LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(4); form.addView(e,p); inputs[i]=e;
         }
         new AlertDialog.Builder(this).setTitle((editId==null?"Add ":"Edit ")+singular(table)).setView(sc)
@@ -289,7 +307,10 @@ public final class MainActivity extends Activity {
         return join("Priority: "+get(c,"priority"),"Status: "+get(c,"status"),"Assigned: "+get(c,"assigned_to"),"Due: "+get(c,"due_date"),get(c,"details"),get(c,"resolution"));
     }
     private String recordDetail(String table,ContentValues v) {
-        if(table.equals("members"))return join(safe(v,"phone"),safe(v,"organization"),safe(v,"status"),safe(v,"address"));
+        if(table.equals("members"))return join(safe(v,"phone"),safe(v,"organization"),safe(v,"status"),safe(v,"address"),
+            safe(v,"profile_photo_path").isEmpty()?"":"Profile thumbnail saved",
+            safe(v,"extra_photo_one_path").isEmpty()?"":"Local photo 1 saved",
+            safe(v,"extra_photo_two_path").isEmpty()?"":"Local photo 2 saved");
         if(table.equals("organizations"))return join("Parent ID: "+safe(v,"parent_id"),safe(v,"location"),safe(v,"notes"));
         if(table.equals("appointments"))return join(safe(v,"organization_id"),safe(v,"start_date")+" → "+(safe(v,"end_date").isEmpty()?"Current":safe(v,"end_date")),safe(v,"status"),safe(v,"notes"));
         if(table.equals("delegations"))return join("Scope: "+safe(v,"scope"),"Organization ID: "+safe(v,"organization_id"),safe(v,"status"),safe(v,"start_date")+" → "+safe(v,"end_date"));
@@ -318,6 +339,24 @@ public final class MainActivity extends Activity {
         try { PackageInfo p=getPackageManager().getPackageInfo(getPackageName(),0); version="Version "+p.versionName+" ("+p.getLongVersionCode()+")\nPackage: "+getPackageName(); }
         catch(PackageManager.NameNotFoundException ignored){}
         new AlertDialog.Builder(this).setTitle("About ChurchCare").setMessage(version+"\n\nOffline-first church and member care. SQLite is the local source of truth.\n\nCurrent milestone: operational local records and change queue. Google Drive sync and enforced account-level access control are not yet connected.").setPositiveButton("OK",null).show();
+    }
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==PICK_MEMBER_PHOTO && resultCode==RESULT_OK && data!=null && data.getData()!=null && photoRecordId!=null && photoColumn!=null) {
+            Uri uri=data.getData();
+            try {
+                final int takeFlags=data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION;
+                getContentResolver().takePersistableUriPermission(uri,takeFlags);
+                ContentValues values=new ContentValues(); values.put(photoColumn,uri.toString());
+                database.updateRecord("members",photoRecordId,values);
+                Toast.makeText(this,photoColumn.equals("profile_photo_path")?"Profile thumbnail saved locally":"Additional photo saved on this device only",Toast.LENGTH_LONG).show();
+                showRecords("members");
+            } catch(Exception e) {
+                android.util.Log.e("ChurchCare","Could not save photo reference",e);
+                Toast.makeText(this,"Photo could not be saved. Please choose another image.",Toast.LENGTH_LONG).show();
+            }
+        }
+        photoRecordId=null; photoColumn=null;
     }
     private int dp(int value){return (int)(value*getResources().getDisplayMetrics().density+0.5f);}
     @Override public void onBackPressed(){showHome();}
