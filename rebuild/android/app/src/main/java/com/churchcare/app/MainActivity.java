@@ -147,13 +147,18 @@ public final class MainActivity extends Activity {
 
     private void showRecords(String table) {
         String title=titleFor(table); base(title, subtitleFor(table));
+        final EditText search;
         if (table.equals("members")) {
-            EditText search=new EditText(this); search.setSingleLine(true); search.setHint("Search name, phone, church or location");
+            search=new EditText(this); search.setSingleLine(true); search.setHint("Search name, phone, church or location");
             root.addView(search);
-            Button find=new Button(this); find.setText("Search"); find.setOnClickListener(v->renderRecords(table,search.getText().toString())); root.addView(find);
-        }
+        } else search=null;
         Button add=new Button(this); add.setText("+ Add "+singular(table)); add.setOnClickListener(v->showForm(table,null,null)); root.addView(add);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        if (search != null) {
+            Button find=new Button(this); find.setText("Search members"); find.setOnClickListener(v->renderInto(table,list,search.getText().toString()));
+            root.addView(find, root.indexOfChild(scroll));
+            search.setOnEditorActionListener((v,action,event)->{renderInto(table,list,search.getText().toString());return false;});
+        }
         renderInto(table,list,"");
     }
 
