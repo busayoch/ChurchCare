@@ -7,8 +7,8 @@ android {
         applicationId 'com.churchcare.app'
         minSdk 23
         targetSdk 35
-        versionCode 14
-        versionName '0.7.0-foundation'
+        versionCode 15
+        versionName '0.7.1-foundation'
     }
 
     signingConfigs {
