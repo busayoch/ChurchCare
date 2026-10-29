@@ -5,6 +5,11 @@ import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.net.Uri;
+import org.json.JSONObject;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -27,7 +32,7 @@ public final class MainActivity extends Activity {
     private MemberDatabase database;
     private LinearLayout root;
     private int blue = 0xFF0B4F85, ink = 0xFF172B3A, muted = 0xFF526273, paper = 0xFFF4F7FA;
-    private static final int PICK_MEMBER_PHOTO = 7104;
+    private static final int PICK_MEMBER_PHOTO = 7104;\n    private static final int EXPORT_BACKUP = 7105;\n    private static final int IMPORT_BACKUP = 7106;
     private String photoRecordId;
     private String photoColumn;
 
@@ -435,6 +440,8 @@ public final class MainActivity extends Activity {
 
     private void showSync() {
         base("Sync queue & status","Local data remains available without internet. Cloud synchronization is not connected yet.");
+        Button exportButton=new Button(this); exportButton.setText("Export local backup"); exportButton.setAllCaps(false); exportButton.setOnClickListener(v->{ Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("application/json"); intent.putExtra(Intent.EXTRA_TITLE,"ChurchCare-backup-"+new SimpleDateFormat("yyyyMMdd-HHmm",Locale.US).format(new Date())+".json"); startActivityForResult(intent,EXPORT_BACKUP); }); root.addView(exportButton);
+        Button importButton=new Button(this); importButton.setText("Restore from backup (replaces local records)"); importButton.setAllCaps(false); importButton.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Restore ChurchCare backup?").setMessage("Restore replaces the records and change log currently stored on this device. Export a backup of the current data first if you may need it. Only choose a trusted ChurchCare JSON backup.").setNegativeButton("Cancel",null).setPositiveButton("Choose backup",(d,w)->{ Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("application/json"); intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivityForResult(intent,IMPORT_BACKUP); }).show()); root.addView(importButton);
         TextView summary=new TextView(this); summary.setText("Records on this device\nMembers: "+database.count("members")+"\nOrganizations: "+database.count("organizations")+"\nAppointments: "+database.count("appointments")+"\nDelegations: "+database.count("delegations")+"\nVisits: "+database.count("visits")+"\nCare cases: "+database.count("care_records")+"\n\nPending change events: "+database.pendingChanges()+"\n\nNo data has been uploaded. Google Drive integration must be configured and tested before synchronization can run."); summary.setTextColor(ink); summary.setTextSize(15); summary.setPadding(dp(12),dp(12),dp(12),dp(12)); root.addView(summary);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         Cursor c=database.syncQueue(); try {while(c.moveToNext()){TextView row=new TextView(this);row.setText("#"+c.getLong(0)+" • "+c.getString(1)+" • "+c.getString(2)+"\n"+new SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.US).format(new Date(c.getLong(3)))+" • "+c.getString(4)+(c.getString(5).isEmpty()?"":"\n"+c.getString(5)));row.setTextColor(muted);row.setPadding(dp(10),dp(9),dp(10),dp(9));row.setBackgroundColor(0xFFFFFFFF);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(5);list.addView(row,p);}}finally{c.close();}
@@ -448,6 +455,33 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
+        if (resultCode == RESULT_OK && data != null && data.getData() != null && requestCode == EXPORT_BACKUP) {
+            try (OutputStream out = getContentResolver().openOutputStream(data.getData(), "w")) {
+                if (out == null) throw new java.io.IOException("Could not open backup destination.");
+                byte[] bytes = database.exportBackup().toString(2).getBytes(StandardCharsets.UTF_8);
+                out.write(bytes); out.flush();
+                Toast.makeText(this, "Backup exported successfully. Keep the file somewhere safe.", Toast.LENGTH_LONG).show();
+            } catch (Exception e) {
+                android.util.Log.e("ChurchCare", "Backup export failed", e);
+                Toast.makeText(this, "Backup export failed. Your current records were not changed.", Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
+        if (resultCode == RESULT_OK && data != null && data.getData() != null && requestCode == IMPORT_BACKUP) {
+            try (InputStream in = getContentResolver().openInputStream(data.getData()); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+                if (in == null) throw new java.io.IOException("Could not open selected backup.");
+                byte[] buffer = new byte[8192]; int count;
+                while ((count = in.read(buffer)) != -1) bytes.write(buffer, 0, count);
+                JSONObject backup = new JSONObject(new String(bytes.toByteArray(), StandardCharsets.UTF_8));
+                database.restoreBackup(backup);
+                Toast.makeText(this, "Backup restored. Review your records before continuing.", Toast.LENGTH_LONG).show();
+                showHome();
+            } catch (Exception e) {
+                android.util.Log.e("ChurchCare", "Backup restore failed", e);
+                new AlertDialog.Builder(this).setTitle("Restore failed").setMessage("ChurchCare could not restore this file. The current database should remain unchanged if validation or the restore transaction failed. Details: " + e.getClass().getSimpleName()).setPositiveButton("OK", null).show();
+            }
+            return;
+        }
         if(requestCode==PICK_MEMBER_PHOTO && resultCode==RESULT_OK && data!=null && data.getData()!=null && photoRecordId!=null && photoColumn!=null) {
             Uri uri=data.getData();
             try {
