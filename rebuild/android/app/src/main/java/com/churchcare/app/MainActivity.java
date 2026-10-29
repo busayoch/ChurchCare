@@ -462,7 +462,7 @@ public final class MainActivity extends Activity {
     private void showSync() {
         base("Sync queue & status","Offline records stay on this device. Cloud backup is explicit; automatic multi-device sync is not active.");
         Button exportButton=new Button(this); exportButton.setText("Export local backup"); exportButton.setAllCaps(false); exportButton.setOnClickListener(v->{ Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("application/zip"); intent.putExtra(Intent.EXTRA_TITLE,"ChurchCare-backup-"+new SimpleDateFormat("yyyyMMdd-HHmm",Locale.US).format(new Date())+".zip"); startActivityForResult(intent,EXPORT_BACKUP); }); root.addView(exportButton);
-        Button driveUpload=new Button(this); driveUpload.setText("Back up full ChurchCare data to Google Drive"); driveUpload.setAllCaps(false); driveUpload.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Upload full ChurchCare backup?").setMessage("This uploads a full ZIP backup of member records, visits, care cases, notes, the change log, and accessible member photos to the Google Drive account you authorize. These may contain sensitive pastoral information. Upload only to an account and Drive location you trust. Extra photos are included in this explicit full backup, but are not part of automatic sync.").setNegativeButton("Cancel",null).setPositiveButton("Continue",(d,w)->authorizeDrive("upload")).show()); root.addView(driveUpload);
+        Button driveUpload=new Button(this); driveUpload.setText("Back up full ChurchCare data to Google Drive"); driveUpload.setAllCaps(false); driveUpload.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Upload full ChurchCare backup?").setMessage("This uploads a ZIP backup of member records, visits, care cases, notes, the change log, and accessible profile thumbnails to the Google Drive account you authorize. Additional member photos stay on this device and are not uploaded. These records may contain sensitive pastoral information. Upload only to an account and Drive location you trust.").setNegativeButton("Cancel",null).setPositiveButton("Continue",(d,w)->authorizeDrive("upload")).show()); root.addView(driveUpload);
         Button driveRestore=new Button(this); driveRestore.setText("Restore latest ChurchCare Drive backup"); driveRestore.setAllCaps(false); driveRestore.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Replace this device's records?").setMessage("ChurchCare will download the newest backup created by this app in the Google Drive account you authorize and replace the records and change log on this device. Export a local backup first. Only continue if you trust the selected Google account and backup.").setNegativeButton("Cancel",null).setPositiveButton("Continue",(d,w)->authorizeDrive("restore")).show()); root.addView(driveRestore);
         Button importButton=new Button(this); importButton.setText("Restore from backup (replaces local records)"); importButton.setAllCaps(false); importButton.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Restore ChurchCare backup?").setMessage("Restore replaces the records and change log currently stored on this device. Export a backup of the current data first if you may need it. Only choose a trusted ChurchCare ZIP backup or an older ChurchCare JSON backup.").setNegativeButton("Cancel",null).setPositiveButton("Choose backup",(d,w)->{ Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("*/*"); intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivityForResult(intent,IMPORT_BACKUP); }).show()); root.addView(importButton);
         TextView summary=new TextView(this); summary.setText("Records on this device\nMembers: "+database.count("members")+"\nOrganizations: "+database.count("organizations")+"\nAppointments: "+database.count("appointments")+"\nDelegations: "+database.count("delegations")+"\nVisits: "+database.count("visits")+"\nCare cases: "+database.count("care_records")+"\n\nPending change events: "+database.pendingChanges()+"\n\nNo data has been uploaded. Google Drive integration must be configured and tested before synchronization can run."); summary.setTextColor(ink); summary.setTextSize(15); summary.setPadding(dp(12),dp(12),dp(12),dp(12)); root.addView(summary);
@@ -476,12 +476,23 @@ public final class MainActivity extends Activity {
         catch(PackageManager.NameNotFoundException ignored){}
         new AlertDialog.Builder(this).setTitle("About ChurchCare").setMessage(version+"\n\nOffline-first church and member care. SQLite is the local source of truth.\n\nCurrent milestone: operational local records and change queue. Google Drive sync and enforced account-level access control are not yet connected.").setPositiveButton("OK",null).show();
     }
-    /** Create a portable ZIP backup and bundle the image bytes referenced by member records. */
+    /** Local ZIP backup may include all saved member photos. */
     private void exportBackupArchive(OutputStream destination) throws Exception {
+        exportBackupArchive(destination, true);
+    }
+
+    /** Cloud backups include profile thumbnails only; extra photos stay on the capturing device. */
+    private void exportCloudBackupArchive(OutputStream destination) throws Exception {
+        exportBackupArchive(destination, false);
+    }
+
+    private void exportBackupArchive(OutputStream destination, boolean includeExtraPhotos) throws Exception {
         JSONObject backup = database.exportBackup();
         Map<String, byte[]> media = new HashMap<>();
         org.json.JSONArray tables = backup.getJSONArray("tables");
-        String[] photoColumns = {"profile_photo_path", "extra_photo_one_path", "extra_photo_two_path"};
+        String[] photoColumns = includeExtraPhotos
+            ? new String[]{"profile_photo_path", "extra_photo_one_path", "extra_photo_two_path"}
+            : new String[]{"profile_photo_path"};
         for (int t = 0; t < tables.length(); t++) {
             JSONObject table = tables.getJSONObject(t);
             if (!"members".equals(table.optString("name"))) continue;
@@ -609,7 +620,7 @@ public final class MainActivity extends Activity {
                 if ("upload".equals(action)) {
                     String name = "ChurchCare-cloud-backup-" + new SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(new Date()) + ".zip";
                     File archive = new File(getCacheDir(), "churchcare-drive-upload.zip");
-                    try (OutputStream out = new FileOutputStream(archive)) { exportBackupArchive(out); }
+                    try (OutputStream out = new FileOutputStream(archive)) { exportCloudBackupArchive(out); }
                     if (archive.length() > 100L * 1024L * 1024L) throw new java.io.IOException("Backup exceeds the 100 MB safety limit.");
                     uploadDriveBackup(token, archive, name);
                     archive.delete();
