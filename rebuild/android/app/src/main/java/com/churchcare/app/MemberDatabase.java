@@ -17,7 +17,7 @@ import java.util.UUID;
  */
 public final class MemberDatabase extends SQLiteOpenHelper {
     private static final String DB_NAME = "churchcare_local.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 3;
     private static final Set<String> TABLES = new HashSet<>(Arrays.asList(
         "members", "organizations", "appointments", "delegations", "visits", "care_records"
     ));
@@ -33,7 +33,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
     }
 
     private void createBaseTables(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY NOT NULL, full_name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', organization TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'Active', organization_id TEXT, profile_photo_path TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY', deleted INTEGER NOT NULL DEFAULT 0)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY NOT NULL, full_name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', organization TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'Active', organization_id TEXT, profile_photo_path TEXT NOT NULL DEFAULT '', extra_photo_one_path TEXT NOT NULL DEFAULT '', extra_photo_two_path TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY', deleted INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_members_name ON members(full_name COLLATE NOCASE)");
         db.execSQL("CREATE TABLE IF NOT EXISTS change_log (sequence INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, operation TEXT NOT NULL, created_at INTEGER NOT NULL, sync_state TEXT NOT NULL DEFAULT 'PENDING', last_error TEXT NOT NULL DEFAULT '')");
     }
@@ -59,6 +59,10 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             addColumnIfMissing(db, "members", "profile_photo_path", "TEXT NOT NULL DEFAULT ''");
             createBaseTables(db);
             createDomainTables(db);
+        }
+        if (oldVersion < 3) {
+            addColumnIfMissing(db, "members", "extra_photo_one_path", "TEXT NOT NULL DEFAULT ''");
+            addColumnIfMissing(db, "members", "extra_photo_two_path", "TEXT NOT NULL DEFAULT ''");
         }
     }
 
@@ -134,7 +138,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
 
     public Cursor listMembers() {
         return getReadableDatabase().query("members",
-            new String[]{"id","full_name","phone","organization","address","status","organization_id","profile_photo_path","created_at","updated_at"},
+            new String[]{"id","full_name","phone","organization","address","status","organization_id","profile_photo_path","extra_photo_one_path","extra_photo_two_path","created_at","updated_at"},
             "deleted=0", null, null, null, "full_name COLLATE NOCASE ASC");
     }
 
@@ -187,6 +191,14 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             while (c.moveToNext()) if (index++ >= 5) ids.add(c.getString(0));
         }
         for (String id : ids) softDelete("visits", id);
+    }
+
+    public String findNameById(String table, String id) {
+        checkTable(table);
+        String column = table.equals("organizations") ? "name" : table.equals("members") ? "full_name" : "id";
+        try (Cursor c = getReadableDatabase().query(table, new String[]{column}, "id=? AND deleted=0", new String[]{id}, null, null, null, "1")) {
+            return c.moveToFirst() ? c.getString(0) : "";
+        }
     }
 
     public Cursor syncQueue() {
