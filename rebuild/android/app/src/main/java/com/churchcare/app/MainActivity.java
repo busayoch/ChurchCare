@@ -465,7 +465,20 @@ public final class MainActivity extends Activity {
         Button driveUpload=new Button(this); driveUpload.setText("Back up full ChurchCare data to Google Drive"); driveUpload.setAllCaps(false); driveUpload.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Upload full ChurchCare backup?").setMessage("This uploads a ZIP backup of member records, visits, care cases, notes, the change log, and accessible profile thumbnails to the Google Drive account you authorize. Additional member photos stay on this device and are not uploaded. These records may contain sensitive pastoral information. Upload only to an account and Drive location you trust.").setNegativeButton("Cancel",null).setPositiveButton("Continue",(d,w)->authorizeDrive("upload")).show()); root.addView(driveUpload);
         Button driveRestore=new Button(this); driveRestore.setText("Restore latest ChurchCare Drive backup"); driveRestore.setAllCaps(false); driveRestore.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Replace this device's records?").setMessage("ChurchCare will download the newest backup created by this app in the Google Drive account you authorize and replace the records and change log on this device. Export a local backup first. Only continue if you trust the selected Google account and backup.").setNegativeButton("Cancel",null).setPositiveButton("Continue",(d,w)->authorizeDrive("restore")).show()); root.addView(driveRestore);
         Button importButton=new Button(this); importButton.setText("Restore from backup (replaces local records)"); importButton.setAllCaps(false); importButton.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Restore ChurchCare backup?").setMessage("Restore replaces the records and change log currently stored on this device. Export a backup of the current data first if you may need it. Only choose a trusted ChurchCare ZIP backup or an older ChurchCare JSON backup.").setNegativeButton("Cancel",null).setPositiveButton("Choose backup",(d,w)->{ Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("*/*"); intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivityForResult(intent,IMPORT_BACKUP); }).show()); root.addView(importButton);
-        TextView summary=new TextView(this); summary.setText("Records on this device\nMembers: "+database.count("members")+"\nOrganizations: "+database.count("organizations")+"\nAppointments: "+database.count("appointments")+"\nDelegations: "+database.count("delegations")+"\nVisits: "+database.count("visits")+"\nCare cases: "+database.count("care_records")+"\n\nPending change events: "+database.pendingChanges()+"\n\nNo data has been uploaded. Google Drive integration must be configured and tested before synchronization can run."); summary.setTextColor(ink); summary.setTextSize(15); summary.setPadding(dp(12),dp(12),dp(12),dp(12)); root.addView(summary);
+        android.content.SharedPreferences syncPrefs=getSharedPreferences("churchcare_sync_status",MODE_PRIVATE);
+        String lastDriveBackup=syncPrefs.getString("drive_backup_time","");
+        String lastDriveFile=syncPrefs.getString("drive_backup_file","");
+        String driveBackupStatus=syncPrefs.getString("drive_backup_status","Not yet confirmed on this installation");
+        String lastDriveRestore=syncPrefs.getString("drive_restore_time","");
+        String driveRestoreStatus=syncPrefs.getString("drive_restore_status","No Drive restore recorded on this installation");
+        String localBackupTime=syncPrefs.getString("local_backup_time","");
+        StringBuilder statusText=new StringBuilder("Records on this device\\nMembers: ").append(database.count("members")).append("\\nOrganizations: ").append(database.count("organizations")).append("\\nAppointments: ").append(database.count("appointments")).append("\\nDelegations: ").append(database.count("delegations")).append("\\nVisits: ").append(database.count("visits")).append("\\nCare cases: ").append(database.count("care_records")).append("\\n\\nPending Local Changes: ").append(database.pendingChanges()).append("\\nThese are queued local record changes, not the Google Drive upload status.\\n\\nGoogle Drive backup: ").append(driveBackupStatus);
+        if(!lastDriveBackup.isEmpty()) statusText.append("\\nLast successful Drive backup: ").append(lastDriveBackup);
+        if(!lastDriveFile.isEmpty()) statusText.append("\\nFile: ").append(lastDriveFile);
+        statusText.append("\\n\\nDrive restore: ").append(driveRestoreStatus);
+        if(!lastDriveRestore.isEmpty()) statusText.append("\\nLast successful Drive restore: ").append(lastDriveRestore);
+        statusText.append("\\n\\nLocal backup: ").append(localBackupTime.isEmpty()?"No local export recorded on this installation":"Last successful export: "+localBackupTime).append("\\n\\nDrive backup is a manual snapshot; automatic multi-device synchronization is not active.");
+        TextView summary=new TextView(this); summary.setText(statusText.toString()); summary.setTextColor(ink); summary.setTextSize(15); summary.setPadding(dp(12),dp(12),dp(12),dp(12)); summary.setBackgroundColor(0xFFFFFFFF); root.addView(summary);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         Cursor c=database.syncQueue(); try {while(c.moveToNext()){TextView row=new TextView(this);row.setText("#"+c.getLong(0)+" • "+c.getString(1)+" • "+c.getString(2)+"\n"+new SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.US).format(new Date(c.getLong(3)))+" • "+c.getString(4)+(c.getString(5).isEmpty()?"":"\n"+c.getString(5)));row.setTextColor(muted);row.setPadding(dp(10),dp(9),dp(10),dp(9));row.setBackgroundColor(0xFFFFFFFF);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=dp(5);list.addView(row,p);}}finally{c.close();}
     }
@@ -624,18 +637,24 @@ public final class MainActivity extends Activity {
                     if (archive.length() > 100L * 1024L * 1024L) throw new java.io.IOException("Backup exceeds the 100 MB safety limit.");
                     uploadDriveBackup(token, archive, name);
                     archive.delete();
+                    getSharedPreferences("churchcare_sync_status",MODE_PRIVATE).edit().putString("drive_backup_status","Completed").putString("drive_backup_time",new SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.US).format(new Date())).putString("drive_backup_file",name).apply();
                     runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Google Drive backup complete")
-                        .setMessage("ChurchCare uploaded " + name + ". This is a manual full backup, not live multi-device synchronization.")
+                        .setMessage("Upload completed successfully: " + name + ". Pending Local Changes are a separate queue and do not mean this upload is pending.")
                         .setPositiveButton("OK", (d,w) -> showSync()).show());
                 } else if ("restore".equals(action)) {
                     byte[] backup = downloadLatestDriveBackup(token);
                     restoreBackupArchive(backup);
+                    getSharedPreferences("churchcare_sync_status",MODE_PRIVATE).edit().putString("drive_restore_status","Completed").putString("drive_restore_time",new SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.US).format(new Date())).apply();
                     runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Drive backup restored")
                         .setMessage("The latest ChurchCare ZIP backup was restored. Review member records and photos before continuing.")
                         .setPositiveButton("OK", (d,w) -> showHome()).show());
                 } else throw new java.io.IOException("Unknown Drive action.");
             } catch (Exception error) {
                 android.util.Log.e("ChurchCare", "Drive operation failed", error);
+                android.content.SharedPreferences.Editor statusEdit=getSharedPreferences("churchcare_sync_status",MODE_PRIVATE).edit();
+                if ("upload".equals(action)) statusEdit.putString("drive_backup_status","Failed").remove("drive_backup_file");
+                else if ("restore".equals(action)) statusEdit.putString("drive_restore_status","Failed");
+                statusEdit.apply();
                 runOnUiThread(() -> showDriveError("Google Drive operation did not complete. Your current records should remain unchanged if download validation or the restore transaction failed. Details: " + error.getMessage()));
             }
         }, "ChurchCare-Drive").start();
@@ -706,7 +725,8 @@ public final class MainActivity extends Activity {
             try (OutputStream out = getContentResolver().openOutputStream(data.getData(), "w")) {
                 if (out == null) throw new java.io.IOException("Could not open backup destination.");
                 exportBackupArchive(out);
-                Toast.makeText(this, "Backup exported with available member photos. Keep the file somewhere safe.", Toast.LENGTH_LONG).show();
+                getSharedPreferences("churchcare_sync_status",MODE_PRIVATE).edit().putString("local_backup_time",new SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.US).format(new Date())).apply();
+                Toast.makeText(this, "Local backup exported with available member photos. Keep the file somewhere safe.", Toast.LENGTH_LONG).show();
             } catch (Exception e) {
                 android.util.Log.e("ChurchCare", "Backup export failed", e);
                 new AlertDialog.Builder(this).setTitle("Backup export failed").setMessage("ChurchCare could not complete the backup. Check that saved photos are still accessible and choose a writable destination. Your records were not changed.").setPositiveButton("OK", null).show();
