@@ -10,8 +10,8 @@ android {
         applicationId 'com.churchcare.app'
         minSdk 23
         targetSdk 35
-        versionCode 17
-        versionName '0.7.3-firebase-google-signin'
+        versionCode 18
+        versionName '0.7.4-governance-role-awareness'
     }
 
     signingConfigs {
