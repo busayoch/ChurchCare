@@ -721,21 +721,8 @@ public final class MainActivity extends Activity {
 
     private void startFirebaseGoogleSignIn() {
         try {
-            GoogleSignIn.getClient(this, firebaseGoogleSignInOptions())
-                .getSignInIntent().addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        try { startActivityForResult(task.getResult(), FIREBASE_GOOGLE_SIGN_IN); }
-                        catch (Exception error) {
-                            new AlertDialog.Builder(this).setTitle("Google sign-in unavailable")
-                                .setMessage("ChurchCare could not open Google's account screen. Please try again. ("+error.getClass().getSimpleName()+")")
-                                .setPositiveButton("OK",null).show();
-                        }
-                    } else {
-                        new AlertDialog.Builder(this).setTitle("Google sign-in unavailable")
-                            .setMessage("ChurchCare could not prepare Google sign-in. Please try again.")
-                            .setPositiveButton("OK",null).show();
-                    }
-                });
+            Intent signInIntent = GoogleSignIn.getClient(this, firebaseGoogleSignInOptions()).getSignInIntent();
+            startActivityForResult(signInIntent, FIREBASE_GOOGLE_SIGN_IN);
         } catch (Exception error) {
             new AlertDialog.Builder(this).setTitle("Google sign-in unavailable")
                 .setMessage("Check Google Play services and try again. ("+error.getClass().getSimpleName()+")")
