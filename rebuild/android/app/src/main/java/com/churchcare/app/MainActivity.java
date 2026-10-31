@@ -787,8 +787,35 @@ public final class MainActivity extends Activity {
         } else {
             String displayName = user.getDisplayName() == null ? "" : user.getDisplayName();
             String email = user.getEmail() == null ? "Email unavailable" : user.getEmail();
-            account.setText((displayName.isEmpty() ? "Google account" : displayName)+"\n"+email+"\n\nChurchCare identity connected. Administrative Owner/Reviewer privileges have not yet been assigned.");
+            account.setText((displayName.isEmpty() ? "Google account" : displayName)+"\n"+email+"\n\nChurchCare identity connected.");
             content.addView(account);
+
+            TextView accessStatus = new TextView(this);
+            accessStatus.setTextColor(ink); accessStatus.setTextSize(14);
+            accessStatus.setPadding(dp(12),dp(12),dp(12),dp(12));
+            accessStatus.setBackgroundColor(0xFFFFFFFF);
+            accessStatus.setText("Access status\nRefreshing your secure role information…");
+            LinearLayout.LayoutParams accessParams = new LinearLayout.LayoutParams(-1,-2);
+            accessParams.topMargin = dp(8);
+            content.addView(accessStatus, accessParams);
+
+            // Force-refresh the Firebase ID token so newly granted or revoked custom claims are observed.
+            user.getIdToken(true).addOnCompleteListener(this, tokenTask -> {
+                if (!tokenTask.isSuccessful() || tokenTask.getResult() == null) {
+                    accessStatus.setText("Access status\nCould not verify your role with Firebase. Connect to the internet and reopen this page. Administrative actions remain unavailable until verification succeeds.");
+                    return;
+                }
+                Object roleValue = tokenTask.getResult().getClaims().get("churchcareRole");
+                String role = roleValue instanceof String ? (String) roleValue : "";
+                if ("owner".equals(role)) {
+                    accessStatus.setText("Access status\nPlatform Owner\nYou can administer ChurchCare platform governance. This role does not automatically grant access to a church’s member or care records.");
+                } else if ("reviewer".equals(role)) {
+                    accessStatus.setText("Access status\nPlatform Reviewer\nYou can participate in platform-level review. Church-specific access is granted separately.");
+                } else {
+                    accessStatus.setText("Access status\nStandard ChurchCare account\nNo platform administration role is assigned. Church-specific access is granted separately.");
+                }
+            });
+
             Button signOut = new Button(this);
             signOut.setText("Sign out of ChurchCare account"); signOut.setAllCaps(false);
             signOut.setOnClickListener(v -> {
@@ -814,7 +841,7 @@ public final class MainActivity extends Activity {
         String version="Version details unavailable";
         try { PackageInfo p=getPackageManager().getPackageInfo(getPackageName(),0); version="Version "+p.versionName+" ("+p.getLongVersionCode()+")\nPackage: "+getPackageName(); }
         catch(PackageManager.NameNotFoundException ignored){}
-        new AlertDialog.Builder(this).setTitle("About ChurchCare").setMessage(version+"\n\nOffline-first church and member care. SQLite remains the local source of truth.\n\nGoogle Drive backup/restore is authorized separately. Firebase account sign-in establishes identity; role-based access and cloud record synchronization are separate stages and are not enabled yet.").setPositiveButton("OK",null).show();
+        new AlertDialog.Builder(this).setTitle("About ChurchCare").setMessage(version+"\n\nOffline-first church and member care. SQLite remains the local source of truth.\n\nGoogle Drive backup/restore is authorized separately. Firebase sign-in establishes identity, and the app can display verified platform role claims. Church-specific permissions, governed publication and cloud record synchronization are separate stages and are not enabled yet.").setPositiveButton("OK",null).show();
     }
     /** Local ZIP backup may include all saved member photos. */
     private void exportBackupArchive(OutputStream destination) throws Exception {
