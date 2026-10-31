@@ -99,6 +99,8 @@ public final class MainActivity extends Activity {
     private static final Field[] APPOINTMENT = {
         new Field("Person / pastor name", "person_name", TEXT, true),
         new Field("Role / title", "role", TEXT, true),
+        new Field("Position code (stable key, e.g. HEAD_OF_FOLLOW_UP)", "position_code", InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS, false),
+        new Field("Appointed person Firebase UID (optional)", "person_uid", InputType.TYPE_CLASS_TEXT, false),
         new Field("Church branch / unit", "organization_name", TEXT, false),
         new Field("Start date (YYYY-MM-DD)", "start_date", DATE, false),
         new Field("End date (blank if current)", "end_date", DATE, false),
@@ -490,6 +492,28 @@ public final class MainActivity extends Activity {
             }
             LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(4); form.addView(e,p); inputs[i]=e;
         }
+        if (table.equals("appointments")) {
+            Button useAccount = new Button(this);
+            useAccount.setText("Use my signed-in Firebase account");
+            useAccount.setAllCaps(false);
+            useAccount.setOnClickListener(v -> {
+                FirebaseUser current = FirebaseAuth.getInstance().getCurrentUser();
+                if (current == null) {
+                    Toast.makeText(this, "Sign in with Google first from Settings / Account.", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                for (int i=0;i<fields.length;i++) {
+                    if ("person_uid".equals(fields[i].key)) inputs[i].setText(current.getUid());
+                    if ("person_name".equals(fields[i].key) && inputs[i].getText().toString().trim().isEmpty() && current.getDisplayName()!=null)
+                        inputs[i].setText(current.getDisplayName());
+                }
+            });
+            form.addView(useAccount);
+            TextView identityNote = new TextView(this);
+            identityNote.setText("A Firebase UID identifies the appointed person. It does not by itself grant cloud access or permissions.");
+            identityNote.setTextColor(muted); identityNote.setTextSize(12);
+            form.addView(identityNote);
+        }
         new AlertDialog.Builder(this).setTitle((editId==null?"Add ":"Edit ")+singular(table)).setView(sc)
             .setNegativeButton("Cancel",null).setPositiveButton("Save",(dialog,which)->{
                 ContentValues values=new ContentValues();
@@ -510,7 +534,7 @@ public final class MainActivity extends Activity {
                 try {
                     if(editId==null) {
                         if(table.equals("appointments") && "Current".equalsIgnoreCase(values.getAsString("status")))
-                            database.closeCurrentAppointments(values.getAsString("person_name"),values.getAsString("start_date"));
+                            database.closeCurrentAppointments(values.getAsString("person_name"), values.getAsString("role"), values.getAsString("organization_id"), values.getAsString("start_date"));
                         database.insertRecord(table,values);
                     } else database.updateRecord(table,editId,values);
                     if(table.equals("visits")) database.trimVisits(values.getAsString("member_name"));
@@ -617,6 +641,16 @@ public final class MainActivity extends Activity {
         } else if(table.equals("appointments")||table.equals("delegations")){
             String org=v.getAsString("organization_name"); v.remove("organization_name");
             if(org!=null&&!org.trim().isEmpty()) v.put("organization_id",database.findIdByName("organizations","name",org)); else v.putNull("organization_id");
+            if (table.equals("appointments")) {
+                String role = v.getAsString("role");
+                String code = v.getAsString("position_code");
+                if (code == null || code.trim().isEmpty()) {
+                    String normalized = role == null ? "" : role.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]+", "_").replaceAll("^_+|_+$", "");
+                    v.put("position_code", normalized);
+                }
+                FirebaseUser actor = FirebaseAuth.getInstance().getCurrentUser();
+                if (actor != null) v.put("appointed_by_uid", actor.getUid());
+            }
         } else if(table.equals("visits")||table.equals("care_records")){
             String member=v.getAsString("member_name"); if(member!=null) v.put("member_id",database.findIdByName("members","full_name",member));
             if(table.equals("care_records")&&!v.containsKey("opened_date"))v.put("opened_date",today());
@@ -668,7 +702,7 @@ public final class MainActivity extends Activity {
     private String recordDetail(String table,Cursor c) {
         if(table.equals("members"))return join(get(c,"phone"),get(c,"organization"),get(c,"status"),get(c,"address"));
         if(table.equals("organizations"))return join(get(c,"parent_id").isEmpty()?"No parent branch/unit linked yet":"Parent: "+database.findNameById("organizations",get(c,"parent_id")),get(c,"location"),get(c,"notes"));
-        if(table.equals("appointments"))return join(get(c,"organization_id"),get(c,"start_date")+" → "+(get(c,"end_date").isEmpty()?"Current":get(c,"end_date")),get(c,"status"),get(c,"notes"));
+        if(table.equals("appointments"))return join("Position code: "+get(c,"position_code"),get(c,"person_uid").isEmpty()?"Not linked to a Firebase identity":"Firebase identity linked",get(c,"start_date")+" → "+(get(c,"end_date").isEmpty()?"Current":get(c,"end_date")),get(c,"status"),get(c,"notes"));
         if(table.equals("delegations"))return join("Scope: "+get(c,"scope"),"Organization ID: "+get(c,"organization_id"),get(c,"status"),get(c,"start_date")+" → "+get(c,"end_date"));
         if(table.equals("visits"))return join("Visitor: "+get(c,"visitor"),"Outcome: "+get(c,"outcome"),"Follow-up: "+get(c,"next_follow_up"),get(c,"notes"));
         return join("Priority: "+get(c,"priority"),"Status: "+get(c,"status"),"Assigned: "+get(c,"assigned_to"),"Due: "+get(c,"due_date"),get(c,"details"),get(c,"resolution"));
@@ -679,7 +713,7 @@ public final class MainActivity extends Activity {
             safe(v,"extra_photo_one_path").isEmpty()?"":"Local photo 1 saved",
             safe(v,"extra_photo_two_path").isEmpty()?"":"Local photo 2 saved");
         if(table.equals("organizations"))return join(safe(v,"parent_id").isEmpty()?"No parent branch/unit linked yet":"Parent: "+database.findNameById("organizations",safe(v,"parent_id")),safe(v,"location"),safe(v,"notes"));
-        if(table.equals("appointments"))return join(safe(v,"organization_id"),safe(v,"start_date")+" → "+(safe(v,"end_date").isEmpty()?"Current":safe(v,"end_date")),safe(v,"status"),safe(v,"notes"));
+        if(table.equals("appointments"))return join("Position code: "+safe(v,"position_code"),safe(v,"person_uid").isEmpty()?"Not linked to a Firebase identity":"Firebase identity linked",safe(v,"start_date")+" → "+(safe(v,"end_date").isEmpty()?"Current":safe(v,"end_date")),safe(v,"status"),safe(v,"notes"));
         if(table.equals("delegations"))return join("Scope: "+safe(v,"scope"),"Organization ID: "+safe(v,"organization_id"),safe(v,"status"),safe(v,"start_date")+" → "+safe(v,"end_date"));
         if(table.equals("visits"))return join("Visitor: "+safe(v,"visitor"),"Outcome: "+safe(v,"outcome"),"Follow-up: "+safe(v,"next_follow_up"),safe(v,"notes"));
         return join("Priority: "+safe(v,"priority"),"Status: "+safe(v,"status"),"Assigned: "+safe(v,"assigned_to"),"Due: "+safe(v,"due_date"),safe(v,"details"),safe(v,"resolution"));
