@@ -40,6 +40,15 @@ jobs:
         shell: pwsh
         run: dotnet publish rebuild/windows/ChurchCare.Windows/ChurchCare.Windows.csproj -c Release -r win-x64 --self-contained true -p:WindowsAppSDKSelfContained=true -o "$env:GITHUB_WORKSPACE\publish\ChurchCare"
 
+      - name: Show XAML compiler diagnostics if publish fails
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-ChildItem "rebuild/windows/ChurchCare.Windows/obj" -Recurse -Include input.json,output.json -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "===== $($_.FullName) ====="
+            Get-Content $_.FullName
+          }
+
       - name: Create conventional Windows installer
         shell: pwsh
         run: |
