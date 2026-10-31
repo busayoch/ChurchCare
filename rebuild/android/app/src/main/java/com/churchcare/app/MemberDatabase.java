@@ -341,7 +341,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         backup.put("schema_version", DB_VERSION);
         backup.put("exported_at", System.currentTimeMillis());
         JSONArray tables = new JSONArray();
-        for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log","church_profile"}) {
+        for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
             JSONObject tableObject = new JSONObject();
             tableObject.put("name", table);
             JSONArray rows = new JSONArray();
@@ -382,7 +382,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         for (int i = 0; i < tableArray.length(); i++) {
             JSONObject tableObject = tableArray.getJSONObject(i);
             String name = tableObject.optString("name", "");
-            if (!Arrays.asList("members","organizations","appointments","delegations","visits","care_records","change_log","church_profile").contains(name)
+            if (!Arrays.asList("members","organizations","appointments","delegations","visits","care_records","change_log","church_profile","configuration_suggestions").contains(name)
                     || !(tableObject.opt("rows") instanceof JSONArray) || incoming.containsKey(name)) {
                 throw new JSONException("The backup contains an invalid or duplicate table.");
             }
@@ -399,6 +399,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
                 db.delete(table, null, null);
             }
             if (incoming.containsKey("church_profile")) db.delete("church_profile", null, null);
+            if (incoming.containsKey("configuration_suggestions")) db.delete("configuration_suggestions", null, null);
             for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log","church_profile"}) {
                 if (!incoming.containsKey(table)) continue;
                 JSONArray rows = incoming.get(table);
