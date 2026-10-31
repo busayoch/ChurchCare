@@ -164,3 +164,31 @@ Use stable UUIDs and preserve historical assignments and relationships rather th
 - A higher-level administrator sees only the records and actions allowed by granted authority.
 - Disconnecting or changing a vertical branch connection does not delete the church's own records or alter historical ownership.
 - Offline work remains available within the device's last authorised scope, and queued actions are rechecked by the backend on reconnection.
+
+
+## Configurable organisational templates and change governance
+
+ChurchCare provides denomination-specific organisational templates as onboarding suggestions. Templates describe organisational units and their relationships only; they must never mix pastoral titles, office holders or leadership appointments into the hierarchy.
+
+The initial research catalogue and machine-readable seed are:
+- `rebuild/CHURCH-ORGANISATION-TEMPLATE-LIBRARY.md`
+- `rebuild/assets/church-organisation-templates.v1.json`
+
+Template statuses distinguish community-confirmed working configurations, source-supported drafts, vocabulary-only entries whose sequence is unverified, and research-pending entries. A draft or unverified entry must not be presented as an authoritative fixed hierarchy.
+
+When a church adopts a template, ChurchCare creates a private copy. The church can customise its copy without affecting other churches or the shared template. A shared-template update must be offered as a reviewable suggestion and must never overwrite an active church configuration.
+
+Any user may propose a configuration correction. Only a person with the appropriate granted authority may approve and publish a change to the active configuration. Changes that affect connected branches must follow the relevant church's approval scope. Proposals must have no effect on live records before approval.
+
+The configuration model must support:
+- strict parent-child hierarchy;
+- cooperative affiliation between autonomous local churches and wider associations/conferences;
+- branch networks where no complete nested hierarchy is established;
+- mixed structures where the church confirms more than one relationship type;
+- standalone churches with no parent unit.
+
+Keep organisational units separate from leadership positions and people. A leadership position may be attached to a unit and occupied by a person for a defined term; changing the office holder does not recreate or rename the unit.
+
+Every published configuration change must retain a version, proposer, reviewer, approver, effective time and audit history. Preview changes before publication. Preserve stable unit IDs and historical record context. Renames, moves, closures, mergers and deletions are distinct operations; none may silently delete subordinate units or records.
+
+Template research is not a substitute for local confirmation. The adopting church must be able to review and adjust every suggested level before activation.
