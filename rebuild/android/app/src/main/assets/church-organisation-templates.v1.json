@@ -1,0 +1,17 @@
+{
+ "catalogVersion":1,
+ "templates":[
+  {"id":"custom","name":"Build my own structure","status":"custom","version":1,"levelsHighestToLowest":[]},
+  {"id":"rccg-ng-community-working","name":"RCCG","status":"community-confirmed working configuration","version":1,"levelsHighestToLowest":["National","Region","Province","Zone","Area","Parish"],"notes":"Community-confirmed for the user's RCCG context; not asserted as universal."},
+  {"id":"assemblies-of-god-ng-draft","name":"Assemblies of God Nigeria","status":"source-supported draft","version":1,"levelsHighestToLowest":["General Council","District","Section","Branch"]},
+  {"id":"nigerian-baptist-convention-draft","name":"Nigerian Baptist Convention","status":"source-supported draft","version":1,"levelsHighestToLowest":["Convention","Conference","Association","Local Baptist Church"],"relationshipModel":"cooperative affiliation"},
+  {"id":"methodist-church-nigeria-draft","name":"Methodist Church Nigeria","status":"source-supported draft","version":1,"levelsHighestToLowest":["Conference","Archdiocese","Diocese","Circuit","Local Church"]},
+  {"id":"christ-embassy-ng-review","name":"Christ Embassy / Believers' LoveWorld","status":"vocabulary only — sequence unverified","version":1,"levelsHighestToLowest":[],"suggestedLevelNames":["Zone","Zonal Church","Central Church","Ministry Centre","Local Church","Group Church"]},
+  {"id":"mfm-ng-review","name":"Mountain of Fire and Miracles Ministries","status":"vocabulary only — sequence unverified","version":1,"levelsHighestToLowest":[],"suggestedLevelNames":["International Headquarters","Branch"]},
+  {"id":"living-faith-ng-review","name":"Living Faith Church Worldwide","status":"vocabulary only — sequence unverified","version":1,"levelsHighestToLowest":[],"suggestedLevelNames":["Area","Zone","Local Church"]},
+  {"id":"cac-ng-review","name":"Christ Apostolic Church","status":"vocabulary only — sequence unverified","version":1,"levelsHighestToLowest":[],"suggestedLevelNames":["General Council","General Executive Council","Region","District Coordination Council (DCC)","Zone","District","Assembly"]},
+  {"id":"church-of-nigeria-anglican-draft","name":"Church of Nigeria (Anglican Communion)","status":"source-supported draft","version":1,"levelsHighestToLowest":["Province","Diocese","Archdeaconry","Parish","Congregation"]},
+  {"id":"catholic-ng-research","name":"Catholic Church in Nigeria","status":"research pending","version":1,"levelsHighestToLowest":[],"suggestedLevelNames":["National Episcopal Conference","Ecclesiastical Province","Archdiocese","Diocese","Deanery","Parish"]}
+ ],
+ "rules":{"unitsAreNotLeadershipTitles":true,"templateUpdatesNeverOverwriteChurchCopy":true,"usersMayProposeChanges":true,"onlyAuthorisedReviewersMayPublish":true,"standaloneChurchesAllowed":true}
+}
