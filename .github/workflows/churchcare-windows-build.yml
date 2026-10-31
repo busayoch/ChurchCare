@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: churchcare-windows-desktop-build
+  cancel-in-progress: true
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -24,6 +28,12 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
+      - name: Pin the build to the installed .NET 8 SDK
+        shell: pwsh
+        run: |
+          Set-Content -Path global.json -Value '{ "sdk": { "version": "8.0.427", "rollForward": "latestPatch" } }'
+          dotnet --version
 
       - name: Restore official ChurchCare icon
         shell: pwsh
