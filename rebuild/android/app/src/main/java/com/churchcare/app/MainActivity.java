@@ -180,6 +180,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showChurchSetup() {
+        loadChurchTemplateOptions();
         base("Set up your church", "Choose a suggested structure or build your own");
         TextView intro=new TextView(this);
         intro.setText("ChurchCare templates are starting suggestions, not rules. Organisational units are separate from pastoral titles. Review and edit the structure before activation.");
@@ -187,7 +188,6 @@ public final class MainActivity extends Activity {
         EditText church=new EditText(this); church.setSingleLine(true); church.setHint("Church name *"); root.addView(church);
         Spinner templates=new Spinner(this);
         templates.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,setupTemplateNames)); root.addView(templates);
-        templates.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,names)); root.addView(templates);
         EditText levels=new EditText(this); levels.setMinLines(3); levels.setGravity(Gravity.TOP); levels.setHint("Levels highest to lowest, separated by >"); root.addView(levels);
         TextView help=new TextView(this); help.setText("You may edit, add, remove or reorder these levels. Unverified templates show suggested terms only; confirm the actual order with your church. You can start at any level."); help.setTextColor(muted); help.setTextSize(13); root.addView(help);
         EditText unit=new EditText(this); unit.setSingleLine(true); unit.setHint("Your starting branch / unit name *"); root.addView(unit);
