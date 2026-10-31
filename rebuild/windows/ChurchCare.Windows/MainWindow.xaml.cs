@@ -16,7 +16,7 @@ public sealed partial class MainWindow : Window
         Title = "ChurchCare";
         Navigation.SelectedItem = Navigation.MenuItems[0];
         RenderPage("Dashboard");
-        if (!_database.HasProfile()) _ = ShowFirstRunSetupAsync();
+        PageHost.Loaded += async (_, _) => { if (!_database.HasProfile()) await ShowFirstRunSetupAsync(); };
     }
 
     private void Navigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
