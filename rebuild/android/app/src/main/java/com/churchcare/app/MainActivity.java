@@ -224,8 +224,7 @@ public final class MainActivity extends Activity {
         form.addView(structureHelp);
         LinearLayout levelRows=new LinearLayout(this); levelRows.setOrientation(LinearLayout.VERTICAL); form.addView(levelRows);
         Button addLevel=new Button(this); addLevel.setText("＋ Add another level"); addLevel.setAllCaps(false); form.addView(addLevel);
-        Spinner levelPicker=new Spinner(this); levelPicker.setVisibility(View.GONE); form.addView(levelPicker);
-        TextView levelPickerLabel=new TextView(this); levelPickerLabel.setText("Pick your church level"); levelPickerLabel.setTextColor(blue); levelPickerLabel.setTypeface(null,1); form.addView(levelPickerLabel);
+        TextView startingLevelLabel=new TextView(this); startingLevelLabel.setText("Pick your church level"); startingLevelLabel.setTextColor(blue); startingLevelLabel.setTypeface(null,1); form.addView(startingLevelLabel);
         RadioGroup levelRadioGroup=new RadioGroup(this); levelRadioGroup.setOrientation(LinearLayout.VERTICAL); form.addView(levelRadioGroup);
 
         EditText customLevel=new EditText(this); customLevel.setSingleLine(true); customLevel.setHint("Enter a level name");
@@ -238,7 +237,6 @@ public final class MainActivity extends Activity {
         final String otherChoice="Other — enter a level";
         final java.util.ArrayList<EditText> customLevelFields=new java.util.ArrayList<>();
         final boolean[] customMode={true};
-        final boolean[] refreshing={false};
 
         Runnable refreshCustomLevels=()->{
             java.util.ArrayList<String> names=new java.util.ArrayList<>();
@@ -247,9 +245,6 @@ public final class MainActivity extends Activity {
                 if(!value.isEmpty()) names.add(value);
             }
             String previouslySelected=levelRadioGroup.getCheckedRadioButtonId()==View.NO_ID?"":String.valueOf(((RadioButton)findViewById(levelRadioGroup.getCheckedRadioButtonId())).getText());
-            refreshing[0]=true;
-            levelPicker.setAdapter(new ArrayAdapter<String>(MainActivity.this,android.R.layout.simple_spinner_dropdown_item,names));
-            refreshing[0]=false;
             levelRadioGroup.removeAllViews();
             for(String name:names) {
                 RadioButton option=new RadioButton(MainActivity.this);
@@ -285,14 +280,12 @@ public final class MainActivity extends Activity {
                 EditText previous=customLevelFields.get(at-1);
                 String a=field.getText().toString(), b=previous.getText().toString();
                 field.setText(b); previous.setText(a);
-                levelPicker.setSelection(Math.max(0,at-1));
             });
             down.setOnClickListener(v->{
                 int at=customLevelFields.indexOf(field); if(at<0||at>=customLevelFields.size()-1)return;
                 EditText next=customLevelFields.get(at+1);
                 String a=field.getText().toString(), b=next.getText().toString();
                 field.setText(b); next.setText(a);
-                levelPicker.setSelection(Math.min(customLevelFields.size()-1,at+1));
             });
             remove.setOnClickListener(v->{
                 if(customLevelFields.size()<=1) { field.setText(""); return; }
@@ -314,7 +307,7 @@ public final class MainActivity extends Activity {
                     addCustomLevel.add("");
                     addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
                     structureHelp.setText("For a church you add yourself, enter every level from highest to lowest. Use the arrows to change the order and × to remove a level.");
-                    levelPickerLabel.setText("Starting level for this registration");
+                    startingLevelLabel.setText("Pick your church level");
                     levelRadioGroup.setVisibility(View.VISIBLE); customLevel.setVisibility(View.GONE);
                 } else {
                     String[] known=setupTemplateLevels[position];
@@ -323,14 +316,14 @@ public final class MainActivity extends Activity {
                         for(String name:known) addCustomLevel.add(name);
                         addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
                         structureHelp.setText("This is a suggested starting structure for the selected church. You can rename, add, remove or reorder levels for its local configuration.");
-                        levelPickerLabel.setText("Starting level for this registration");
-                        levelPicker.setVisibility(View.VISIBLE); customLevel.setVisibility(View.GONE);
+                        startingLevelLabel.setText("Pick your church level");
+                        customLevel.setVisibility(View.GONE);
                     } else {
                         addCustomLevel.add("");
                         addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
                         structureHelp.setText("The catalogue does not confirm a complete order for this church. Define the actual order used by your congregation; suggested names are available in the catalogue notes.");
-                        levelPickerLabel.setText("Starting level for this registration");
-                        levelPicker.setVisibility(View.VISIBLE); customLevel.setVisibility(View.GONE);
+                        startingLevelLabel.setText("Pick your church level");
+                        customLevel.setVisibility(View.GONE);
                     }
                 }
             }
