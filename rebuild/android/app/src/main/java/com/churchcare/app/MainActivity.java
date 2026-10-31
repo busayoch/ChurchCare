@@ -149,22 +149,47 @@ public final class MainActivity extends Activity {
     }
 
     private void showChurchSetup() {
-        base("Set up your church", "Start ChurchCare at the level where your church is ready to begin");
-        TextView intro = new TextView(this);
-        intro.setText("Every church has its own private ChurchCare space. You can begin at national, regional, district, parish or local branch level. You do not need to register the levels above you first.");
-        intro.setTextColor(ink); intro.setTextSize(15); intro.setPadding(dp(14),dp(14),dp(14),dp(14)); intro.setBackgroundColor(0xFFFFFFFF); root.addView(intro);
-        EditText church = new EditText(this); church.setSingleLine(true); church.setHint("Church name *"); church.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS); root.addView(church);
-        EditText unit = new EditText(this); unit.setSingleLine(true); unit.setHint("Your starting branch / unit name *"); unit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS); root.addView(unit);
-        EditText level = new EditText(this); level.setSingleLine(true); level.setHint("What level is this? e.g. Local Branch, District, Region, National *"); level.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES); root.addView(level);
-        TextView note = new TextView(this); note.setText("You can add the other levels and branches later. Leave the parent level unselected if it has not joined ChurchCare yet."); note.setTextColor(muted); note.setTextSize(13); note.setPadding(0,dp(10),0,dp(10)); root.addView(note);
-        Button create = new Button(this); create.setText("Create my ChurchCare space"); create.setAllCaps(false); root.addView(create);
+        base("Set up your church", "Choose a suggested structure or build your own");
+        TextView intro=new TextView(this);
+        intro.setText("ChurchCare templates are starting suggestions, not rules. Organisational units are separate from pastoral titles. Review and edit the structure before activation.");
+        intro.setTextColor(ink); intro.setTextSize(15); intro.setPadding(dp(14),dp(14),dp(14),dp(14)); root.addView(intro);
+        EditText church=new EditText(this); church.setSingleLine(true); church.setHint("Church name *"); root.addView(church);
+        Spinner templates=new Spinner(this);
+        String[] names={"Build my own structure","RCCG — community-confirmed","Assemblies of God Nigeria — draft","Nigerian Baptist Convention — draft","Methodist Church Nigeria — draft","Christ Embassy / Believers' LoveWorld — review","MFM — review","Living Faith — review","CAC — review","Church of Nigeria Anglican — draft","Catholic Church — research pending"};
+        String[] ids={"custom","rccg-ng-community-working","assemblies-of-god-ng-draft","nigerian-baptist-convention-draft","methodist-church-nigeria-draft","christ-embassy-ng-review","mfm-ng-review","living-faith-ng-review","cac-ng-review","church-of-nigeria-anglican-draft","catholic-ng-research"};
+        String[][] suggestions={
+            {},{"National","Region","Province","Zone","Area","Parish"},{"General Council","District","Section","Branch"},{"Convention","Conference","Association","Local Baptist Church"},{"Conference","Archdiocese","Diocese","Circuit","Local Church"},{},{""},{"","",""},{"","",""},{"Province","Diocese","Archdeaconry","Parish","Congregation"},{}
+        };
+        templates.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,names)); root.addView(templates);
+        EditText levels=new EditText(this); levels.setMinLines(3); levels.setGravity(Gravity.TOP); levels.setHint("Levels highest to lowest, separated by >"); root.addView(levels);
+        TextView help=new TextView(this); help.setText("You may edit, add, remove or reorder these levels. Unverified templates show suggested terms only; confirm the actual order with your church. You can start at any level."); help.setTextColor(muted); help.setTextSize(13); root.addView(help);
+        EditText unit=new EditText(this); unit.setSingleLine(true); unit.setHint("Your starting branch / unit name *"); root.addView(unit);
+        EditText level=new EditText(this); level.setSingleLine(true); level.setHint("Level of your starting unit *"); root.addView(level);
+        templates.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> p,View v,int position,long id) {
+                String[] chosen=suggestions[position];
+                if(chosen.length>0 && chosen[0].length()>0) levels.setText(android.text.TextUtils.join(" > ",chosen));
+                else if(position==0) levels.setText("");
+                if(chosen.length>0 && chosen[0].length()>0 && level.getText().toString().trim().isEmpty()) level.setText(chosen[chosen.length-1]);
+            }
+            @Override public void onNothingSelected(AdapterView<?> p) {}
+        });
+        Button create=new Button(this); create.setText("Review and create ChurchCare space"); create.setAllCaps(false); root.addView(create);
         create.setOnClickListener(v -> {
-            String churchName = church.getText().toString().trim();
-            String unitName = unit.getText().toString().trim();
-            String levelName = level.getText().toString().trim();
-            if (churchName.isEmpty() || unitName.isEmpty() || levelName.isEmpty()) { Toast.makeText(this, "Complete all three fields to continue.", Toast.LENGTH_LONG).show(); return; }
-            try { database.saveChurchSetup(churchName, unitName, levelName); showHome(); }
-            catch (Exception error) { android.util.Log.e("ChurchCare", "Church setup failed", error); Toast.makeText(this, "Church setup could not be saved. Please try again.", Toast.LENGTH_LONG).show(); }
+            String cn=church.getText().toString().trim(), un=unit.getText().toString().trim(), ln=level.getText().toString().trim(), raw=levels.getText().toString().trim();
+            if(cn.isEmpty()||un.isEmpty()||ln.isEmpty()||raw.isEmpty()) { Toast.makeText(this,"Complete the church, starting unit, level and structure fields.",Toast.LENGTH_LONG).show(); return; }
+            String[] parts=raw.split("\\s*>\\s*"); JSONArray structure=new JSONArray(); boolean levelFound=false;
+            for(String part:parts) { String item=part.trim(); if(!item.isEmpty()) { structure.put(item); if(item.equalsIgnoreCase(ln)) levelFound=true; } }
+            if(structure.length()==0||!levelFound) { Toast.makeText(this,"The starting unit level must appear in the structure list.",Toast.LENGTH_LONG).show(); return; }
+            int pos=templates.getSelectedItemPosition(); StringBuilder preview=new StringBuilder();
+            for(int i=0;i<structure.length();i++) { if(i>0) preview.append(" → "); preview.append(structure.optString(i)); }
+            String templateId=ids[pos]; int templateVersion=1;
+            new AlertDialog.Builder(this).setTitle("Review your church structure")
+                .setMessage("Church: "+cn+"\nStarting unit: "+un+" ("+ln+")\n\n"+preview+"\n\nThis is a private copy for your church. Later changes can be proposed by users and published only by authorised people.")
+                .setNegativeButton("Edit",null).setPositiveButton("Confirm",(dialog,which)->{
+                    try { database.saveChurchSetup(cn,un,ln,templateId,structure.toString(),templateVersion); showHome(); }
+                    catch(Exception e) { android.util.Log.e("ChurchCare","Setup failed",e); Toast.makeText(this,"Could not save setup. Please try again.",Toast.LENGTH_LONG).show(); }
+                }).show();
         });
     }
 
