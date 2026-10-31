@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from typing import Any
 
 import firebase_admin
@@ -34,6 +33,8 @@ def verified_user(uid: str):
         fail("The supplied Firebase UID does not exist.")
     if not user.email or not user.email_verified:
         fail("The target account must have a verified email address.")
+    if not any(info.provider_id == "google.com" for info in (user.provider_data or [])):
+        fail("The target account must be linked to Google sign-in.")
     return user
 
 
@@ -60,7 +61,7 @@ def write_claims(uid: str, role: str | None) -> None:
     else:
         claims[ROLE_FIELD] = role
     # Preserve unrelated custom claims owned by other trusted systems.
-    auth.set_custom_user_claims(uid, claims or None)
+    auth.set_custom_user_claims(uid, claims)
 
 
 def require_owner(requester_uid: str, db) -> None:
@@ -101,7 +102,7 @@ def bootstrap_owner(target_uid: str, db) -> None:
     # If the process stops here, rerunning for the same UID safely completes
     # the operation; a different UID cannot take over the reserved bootstrap.
     write_claims(target_uid, "owner")
-    db.collection("system").document("roles").collection("users").document(target_uid).set({
+    db.collection("system_roles").document(target_uid).set({
         "uid": target_uid,
         "role": "owner",
         "status": "active",
