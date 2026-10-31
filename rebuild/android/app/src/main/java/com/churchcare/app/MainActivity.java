@@ -46,6 +46,15 @@ import java.util.zip.ZipOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.auth.AuthCredential;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.android.gms.auth.api.identity.AuthorizationRequest;
 import com.google.android.gms.auth.api.identity.AuthorizationResult;
 import com.google.android.gms.auth.api.identity.Identity;
@@ -59,6 +68,7 @@ public final class MainActivity extends Activity {
     private static final int EXPORT_BACKUP = 7105;
     private static final int IMPORT_BACKUP = 7106;
     private static final int DRIVE_AUTHORIZATION = 7107;
+    private static final int FIREBASE_GOOGLE_SIGN_IN = 7108;
     private String pendingDriveAction = "";
     private String photoRecordId;
     private String photoColumn;
@@ -385,7 +395,7 @@ public final class MainActivity extends Activity {
         menuButton(menu,"Visits & follow-ups","Record pastoral visits and next steps",()->showRecords("visits"));
         menuButton(menu,"Care cases & escalation","Track care needs, priorities, assignments and resolution",()->showRecords("care_records"));
         menuButton(menu,"Sync queue & data status","Review local changes awaiting a future cloud sync ("+pending+" pending)",this::showSync);
-        menuButton(menu,"Settings / About","Version, local storage and app information",this::showAbout);
+        menuButton(menu,"Settings / Account","Google account, app version and local storage",this::showSettings);
         scroll.addView(menu); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         TextView footer=new TextView(this); footer.setText("Offline ready • SQLite local database • Cloud sync not connected"); footer.setTextColor(muted); footer.setTextSize(12); footer.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(-1,-2); fp.topMargin=dp(8); root.addView(footer,fp);
@@ -702,11 +712,122 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     }
 
+    private GoogleSignInOptions firebaseGoogleSignInOptions() {
+        return new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestIdToken(getString(R.string.default_web_client_id))
+            .build();
+    }
+
+    private void startFirebaseGoogleSignIn() {
+        try {
+            GoogleSignIn.getClient(this, firebaseGoogleSignInOptions())
+                .getSignInIntent().addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        try { startActivityForResult(task.getResult(), FIREBASE_GOOGLE_SIGN_IN); }
+                        catch (Exception error) {
+                            new AlertDialog.Builder(this).setTitle("Google sign-in unavailable")
+                                .setMessage("ChurchCare could not open Google's account screen. Please try again. ("+error.getClass().getSimpleName()+")")
+                                .setPositiveButton("OK",null).show();
+                        }
+                    } else {
+                        new AlertDialog.Builder(this).setTitle("Google sign-in unavailable")
+                            .setMessage("ChurchCare could not prepare Google sign-in. Please try again.")
+                            .setPositiveButton("OK",null).show();
+                    }
+                });
+        } catch (Exception error) {
+            new AlertDialog.Builder(this).setTitle("Google sign-in unavailable")
+                .setMessage("Check Google Play services and try again. ("+error.getClass().getSimpleName()+")")
+                .setPositiveButton("OK",null).show();
+        }
+    }
+
+    private void completeFirebaseGoogleSignIn(Intent data) {
+        Task<GoogleSignInAccount> accountTask = GoogleSignIn.getSignedInAccountFromIntent(data);
+        try {
+            GoogleSignInAccount account = accountTask.getResult(ApiException.class);
+            String idToken = account.getIdToken();
+            if (idToken == null || idToken.isEmpty()) {
+                throw new IllegalStateException("Google did not return an identity token. Check the Web OAuth client configuration.");
+            }
+            AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
+            FirebaseAuth.getInstance().signInWithCredential(credential)
+                .addOnCompleteListener(this, result -> {
+                    if (result.isSuccessful()) {
+                        Toast.makeText(this, "ChurchCare account connected.", Toast.LENGTH_LONG).show();
+                        showSettings();
+                    } else {
+                        String reason = result.getException() == null ? "Unknown sign-in error" : result.getException().getMessage();
+                        new AlertDialog.Builder(this).setTitle("ChurchCare sign-in failed")
+                            .setMessage("Your local records and Google Drive backup settings were not changed. "+reason)
+                            .setPositiveButton("OK",(d,w)->showSettings()).show();
+                    }
+                });
+        } catch (Exception error) {
+            android.util.Log.e("ChurchCare","Firebase Google sign-in failed",error);
+            new AlertDialog.Builder(this).setTitle("Google sign-in not completed")
+                .setMessage("No ChurchCare account was connected. Please try again. ("+error.getClass().getSimpleName()+")")
+                .setPositiveButton("OK",(d,w)->showSettings()).show();
+        }
+    }
+
+    private void showSettings() {
+        base("Settings & account", "Manage your ChurchCare identity and review app information");
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(content);
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+
+        TextView heading = new TextView(this);
+        heading.setText("ChurchCare account");
+        heading.setTextColor(blue); heading.setTextSize(18); heading.setTypeface(null,1);
+        content.addView(heading);
+
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        TextView account = new TextView(this);
+        account.setTextColor(ink); account.setTextSize(15);
+        account.setPadding(dp(12),dp(14),dp(12),dp(14));
+        account.setBackgroundColor(0xFFFFFFFF);
+        if (user == null) {
+            account.setText("Not signed in\n\nSign in with the same Google account you use for ChurchCare Google Drive backup and restore. This establishes your ChurchCare identity; it does not upload or replace local records.");
+            content.addView(account);
+            Button signIn = new Button(this);
+            signIn.setText("Continue with Google"); signIn.setAllCaps(false);
+            signIn.setOnClickListener(v->startFirebaseGoogleSignIn());
+            content.addView(signIn);
+        } else {
+            String displayName = user.getDisplayName() == null ? "" : user.getDisplayName();
+            String email = user.getEmail() == null ? "Email unavailable" : user.getEmail();
+            account.setText((displayName.isEmpty() ? "Google account" : displayName)+"\n"+email+"\n\nChurchCare identity connected. Administrative Owner/Reviewer privileges have not yet been assigned.");
+            content.addView(account);
+            Button signOut = new Button(this);
+            signOut.setText("Sign out of ChurchCare account"); signOut.setAllCaps(false);
+            signOut.setOnClickListener(v -> {
+                FirebaseAuth.getInstance().signOut();
+                GoogleSignIn.getClient(this,firebaseGoogleSignInOptions()).signOut()
+                    .addOnCompleteListener(done -> showSettings());
+            });
+            content.addView(signOut);
+        }
+
+        TextView note = new TextView(this);
+        note.setText("Google Drive backup and restore uses its own permission and remains separate from this ChurchCare sign-in. Signing in or out here does not delete local SQLite records or change Drive backups.");
+        note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(4),dp(12),dp(4),dp(12));
+        content.addView(note);
+
+        Button about = new Button(this);
+        about.setText("About ChurchCare"); about.setAllCaps(false);
+        about.setOnClickListener(v->showAbout());
+        content.addView(about);
+    }
+
     private void showAbout() {
         String version="Version details unavailable";
         try { PackageInfo p=getPackageManager().getPackageInfo(getPackageName(),0); version="Version "+p.versionName+" ("+p.getLongVersionCode()+")\nPackage: "+getPackageName(); }
         catch(PackageManager.NameNotFoundException ignored){}
-        new AlertDialog.Builder(this).setTitle("About ChurchCare").setMessage(version+"\n\nOffline-first church and member care. SQLite is the local source of truth.\n\nCurrent milestone: operational local records and change queue. Google Drive sync and enforced account-level access control are not yet connected.").setPositiveButton("OK",null).show();
+        new AlertDialog.Builder(this).setTitle("About ChurchCare").setMessage(version+"\n\nOffline-first church and member care. SQLite remains the local source of truth.\n\nGoogle Drive backup/restore is authorized separately. Firebase account sign-in establishes identity; role-based access and cloud record synchronization are separate stages and are not enabled yet.").setPositiveButton("OK",null).show();
     }
     /** Local ZIP backup may include all saved member photos. */
     private void exportBackupArchive(OutputStream destination) throws Exception {
@@ -933,6 +1054,15 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
+        if (requestCode == FIREBASE_GOOGLE_SIGN_IN) {
+            if (resultCode != RESULT_OK || data == null) {
+                Toast.makeText(this,"Google sign-in was cancelled.",Toast.LENGTH_SHORT).show();
+                showSettings();
+                return;
+            }
+            completeFirebaseGoogleSignIn(data);
+            return;
+        }
         if(requestCode == DRIVE_AUTHORIZATION) {
             if(resultCode != RESULT_OK || data == null) { pendingDriveAction = ""; showDriveError("Google Drive permission was cancelled or not granted."); return; }
             try { continueDriveAuthorization(Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(data)); }
