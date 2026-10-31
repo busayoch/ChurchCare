@@ -150,22 +150,47 @@ public sealed partial class MainWindow : Window
     {
         var church = new TextBox { Header = "Church name", PlaceholderText = "e.g. Grace Chapel" };
         var levels = new TextBox { Header = "Church structure — highest level first (one per line)", AcceptsReturn = true, Height = 130, Text = "National\nDistrict\nArea\nAssembly" };
-        var starting = new TextBox { Header = "Starting level for this registration", Text = "Assembly" };
+        var startingLevels = new StackPanel { Spacing = 6 };
         var unit = new TextBox { Header = "Name of this branch or unit", PlaceholderText = "e.g. Grace Chapel, Ikeja" };
+        void RefreshStartingLevelChoices()
+        {
+            startingLevels.Children.Clear();
+            var availableNames = levels.Text.Split(new[] { '\\r', '\\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (var levelName in availableNames)
+            {
+                startingLevels.Children.Add(new RadioButton
+                {
+                    Content = levelName,
+                    GroupName = "ChurchStartingLevel",
+                    Tag = levelName,
+                    MinHeight = 34
+                });
+            }
+        }
+        levels.TextChanged += (_, _) => RefreshStartingLevelChoices();
+        RefreshStartingLevelChoices();
+
         var content = new StackPanel { Spacing = 10 };
         content.Children.Add(new TextBlock { Text = "Create your church profile", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         content.Children.Add(new TextBlock { Text = "Define your own hierarchy. Add levels from highest to lowest, then identify the branch that is starting ChurchCare." });
-        content.Children.Add(church); content.Children.Add(levels); content.Children.Add(starting); content.Children.Add(unit);
+        content.Children.Add(church);
+        content.Children.Add(levels);
+        content.Children.Add(new TextBlock { Text = "Pick your church level", FontSize = 15, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 0) });
+        content.Children.Add(startingLevels);
+        content.Children.Add(unit);
         var dialog = new ContentDialog { XamlRoot = Content.XamlRoot, Title = "Welcome to ChurchCare", Content = content, PrimaryButtonText = "Create profile", CloseButtonText = "Not now", DefaultButton = ContentDialogButton.Primary };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-        var names = levels.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        if (string.IsNullOrWhiteSpace(church.Text) || string.IsNullOrWhiteSpace(unit.Text) || names.Count == 0 || !names.Contains(starting.Text.Trim(), StringComparer.OrdinalIgnoreCase))
+        var names = levels.Text.Split(new[] { '\\r', '\\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var selectedStartingLevel = startingLevels.Children.OfType<RadioButton>()
+            .FirstOrDefault(option => option.IsChecked == true)?.Tag as string;
+        if (string.IsNullOrWhiteSpace(church.Text) || string.IsNullOrWhiteSpace(unit.Text) || names.Count == 0 || string.IsNullOrWhiteSpace(selectedStartingLevel) || !names.Contains(selectedStartingLevel, StringComparer.OrdinalIgnoreCase))
         {
-            await ShowMessageAsync("Please enter the church name, at least one unique level, a starting level that appears in the list, and the branch/unit name.");
+            await ShowMessageAsync("Please enter the church name, at least one unique level, choose your church level, and enter the branch/unit name.");
             await ShowFirstRunSetupAsync();
             return;
         }
-        _database.SaveSetup(church.Text.Trim(), unit.Text.Trim(), starting.Text.Trim(), names);
+        _database.SaveSetup(church.Text.Trim(), unit.Text.Trim(), selectedStartingLevel, names);
         RenderPage("Dashboard");
     }
 
