@@ -20,7 +20,7 @@ import java.util.UUID;
  */
 public final class MemberDatabase extends SQLiteOpenHelper {
     private static final String DB_NAME = "churchcare_local.db";
-    private static final int DB_VERSION = 5;
+    private static final int DB_VERSION = 6;
     private static final Set<String> TABLES = new HashSet<>(Arrays.asList(
         "members", "organizations", "appointments", "delegations", "visits", "care_records"
     ));
@@ -33,6 +33,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
     @Override public void onCreate(SQLiteDatabase db) {
         createBaseTables(db);
         createDomainTables(db);
+        createGovernanceTables(db);
         createChurchProfileTable(db);
         addColumnIfMissing(db, "church_profile", "template_id", "TEXT NOT NULL DEFAULT 'custom'");
         addColumnIfMissing(db, "church_profile", "structure_json", "TEXT NOT NULL DEFAULT '[]'");
@@ -43,6 +44,30 @@ public final class MemberDatabase extends SQLiteOpenHelper {
 
     private void createChurchProfileTable(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE IF NOT EXISTS church_profile (id INTEGER PRIMARY KEY CHECK(id=1), church_id TEXT NOT NULL UNIQUE, church_name TEXT NOT NULL, local_unit_id TEXT NOT NULL, local_unit_name TEXT NOT NULL, local_level_name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)");
+    }
+
+
+    /**
+     * Governance foundation: Firebase UIDs identify people, reporting is many-to-many,
+     * and delegation/audit records are explicit. This local schema does not grant cloud
+     * access or replace Firestore security rules.
+     */
+    private void createGovernanceTables(SQLiteDatabase db) {
+        addColumnIfMissing(db, "appointments", "person_uid", "TEXT");
+        addColumnIfMissing(db, "appointments", "position_code", "TEXT NOT NULL DEFAULT ''");
+        addColumnIfMissing(db, "appointments", "appointed_by_uid", "TEXT");
+        addColumnIfMissing(db, "delegations", "overseer_uid", "TEXT");
+        addColumnIfMissing(db, "delegations", "delegate_uid", "TEXT");
+        addColumnIfMissing(db, "delegations", "granted_by_uid", "TEXT");
+        addColumnIfMissing(db, "delegations", "permissions_json", "TEXT NOT NULL DEFAULT '[]'");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_appointments_uid_status ON appointments(person_uid, status, deleted)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_appointments_org_status ON appointments(organization_id, status, deleted)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS appointment_reporting (id TEXT PRIMARY KEY NOT NULL, appointment_id TEXT NOT NULL, reports_to_appointment_id TEXT NOT NULL, relationship_type TEXT NOT NULL DEFAULT 'DIRECT', start_date TEXT NOT NULL DEFAULT '', end_date TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'Current', created_by_uid TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY', UNIQUE(appointment_id, reports_to_appointment_id))");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_reporting_parent ON appointment_reporting(reports_to_appointment_id, status, deleted)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_reporting_child ON appointment_reporting(appointment_id, status, deleted)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS governance_audit (id TEXT PRIMARY KEY NOT NULL, actor_uid TEXT NOT NULL, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, organization_id TEXT, details_json TEXT NOT NULL DEFAULT '{}', occurred_at INTEGER NOT NULL, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY')");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_governance_audit_actor_time ON governance_audit(actor_uid, occurred_at DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_governance_audit_entity_time ON governance_audit(entity_type, entity_id, occurred_at DESC)");
     }
 
     private void createConfigurationSuggestionsTable(SQLiteDatabase db) {
@@ -90,6 +115,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             addColumnIfMissing(db, "church_profile", "template_version", "INTEGER NOT NULL DEFAULT 0");
             createConfigurationSuggestionsTable(db);
         }
+        if (oldVersion < 6) createGovernanceTables(db);
     }
 
     /** A local ChurchCare installation belongs to one church and one starting branch/unit. */
@@ -341,7 +367,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         backup.put("schema_version", DB_VERSION);
         backup.put("exported_at", System.currentTimeMillis());
         JSONArray tables = new JSONArray();
-        for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
+        for (String table : new String[]{"members","organizations","appointments","delegations","appointment_reporting","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
             JSONObject tableObject = new JSONObject();
             tableObject.put("name", table);
             JSONArray rows = new JSONArray();
@@ -382,7 +408,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         for (int i = 0; i < tableArray.length(); i++) {
             JSONObject tableObject = tableArray.getJSONObject(i);
             String name = tableObject.optString("name", "");
-            if (!Arrays.asList("members","organizations","appointments","delegations","visits","care_records","change_log","church_profile","configuration_suggestions").contains(name)
+            if (!Arrays.asList("members","organizations","appointments","delegations","appointment_reporting","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions").contains(name)
                     || !(tableObject.opt("rows") instanceof JSONArray) || incoming.containsKey(name)) {
                 throw new JSONException("The backup contains an invalid or duplicate table.");
             }
@@ -395,12 +421,12 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
         try {
-            for (String table : new String[]{"change_log","visits","care_records","appointments","delegations","members","organizations"}) {
+            for (String table : new String[]{"change_log","governance_audit","appointment_reporting","visits","care_records","appointments","delegations","members","organizations"}) {
                 db.delete(table, null, null);
             }
             if (incoming.containsKey("church_profile")) db.delete("church_profile", null, null);
             if (incoming.containsKey("configuration_suggestions")) db.delete("configuration_suggestions", null, null);
-            for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
+            for (String table : new String[]{"members","organizations","appointments","delegations","appointment_reporting","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
                 if (!incoming.containsKey(table)) continue;
                 JSONArray rows = incoming.get(table);
                 for (int i = 0; i < rows.length(); i++) {
