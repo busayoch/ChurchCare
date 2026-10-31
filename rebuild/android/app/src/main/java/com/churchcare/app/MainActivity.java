@@ -148,17 +148,20 @@ public final class MainActivity extends Activity {
         setContentView(root);
     }
 
-    private String[] setupTemplateNames = new String[]{"Build my own structure"};
+    private String[] setupTemplateNames = new String[]{"My church is not listed — add it"};
     private String[] setupTemplateIds = new String[]{"custom"};
     private int[] setupTemplateVersions = new int[]{0};
     private String[][] setupTemplateLevels = new String[][]{new String[0]};
+    private String[][] setupTemplateLevelChoices = new String[][]{new String[0]};
 
     private void loadChurchTemplateOptions() {
         java.util.ArrayList<String> names=new java.util.ArrayList<>();
         java.util.ArrayList<String> ids=new java.util.ArrayList<>();
         java.util.ArrayList<Integer> versions=new java.util.ArrayList<>();
         java.util.ArrayList<String[]> structures=new java.util.ArrayList<>();
-        names.add("Build my own structure"); ids.add("custom"); versions.add(0); structures.add(new String[0]);
+        java.util.ArrayList<String[]> choices=new java.util.ArrayList<>();
+        names.add("My church is not listed — add it");
+        ids.add("custom"); versions.add(0); structures.add(new String[0]); choices.add(new String[0]);
         try (InputStream in=getAssets().open("church-organisation-templates.v1.json")) {
             ByteArrayOutputStream out=new ByteArrayOutputStream(); byte[] buffer=new byte[4096]; int n;
             while((n=in.read(buffer))!=-1) out.write(buffer,0,n);
@@ -166,55 +169,112 @@ public final class MainActivity extends Activity {
             JSONArray templates=catalog.getJSONArray("templates");
             for(int i=0;i<templates.length();i++) {
                 JSONObject item=templates.getJSONObject(i);
-                names.add(item.optString("name")+" — "+item.optString("status"));
-                ids.add(item.optString("id")); versions.add(item.optInt("version",1));
+                String id=item.optString("id","");
+                if("custom".equals(id)) continue;
+                names.add(item.optString("name", "Church"));
+                ids.add(id); versions.add(item.optInt("version",1));
+                java.util.ArrayList<String> ordered=new java.util.ArrayList<>();
                 JSONArray levels=item.optJSONArray("levelsHighestToLowest");
-                java.util.ArrayList<String> levelNames=new java.util.ArrayList<>();
-                if(levels!=null) for(int j=0;j<levels.length();j++) levelNames.add(levels.optString(j));
-                structures.add(levelNames.toArray(new String[0]));
+                if(levels!=null) for(int j=0;j<levels.length();j++) ordered.add(levels.optString(j));
+                java.util.ArrayList<String> available=new java.util.ArrayList<>(ordered);
+                if(available.isEmpty()) {
+                    JSONArray suggested=item.optJSONArray("suggestedLevelNames");
+                    if(suggested!=null) for(int j=0;j<suggested.length();j++) available.add(suggested.optString(j));
+                }
+                structures.add(ordered.toArray(new String[0]));
+                choices.add(available.toArray(new String[0]));
             }
         } catch(Exception error) { android.util.Log.e("ChurchCare","Could not load template catalogue",error); }
         setupTemplateNames=names.toArray(new String[0]); setupTemplateIds=ids.toArray(new String[0]);
         setupTemplateVersions=new int[versions.size()]; setupTemplateLevels=structures.toArray(new String[0][]);
+        setupTemplateLevelChoices=choices.toArray(new String[0][]);
         for(int i=0;i<versions.size();i++) setupTemplateVersions[i]=versions.get(i);
     }
 
     private void showChurchSetup() {
         loadChurchTemplateOptions();
-        base("Set up your church", "Choose a suggested structure or build your own");
+        base("Create your church profile", "Choose your church, select your level and name your branch or unit");
         TextView intro=new TextView(this);
-        intro.setText("ChurchCare templates are starting suggestions, not rules. Organisational units are separate from pastoral titles. Review and edit the structure before activation.");
-        intro.setTextColor(ink); intro.setTextSize(15); intro.setPadding(dp(14),dp(14),dp(14),dp(14)); root.addView(intro);
-        EditText church=new EditText(this); church.setSingleLine(true); church.setHint("Church name *"); root.addView(church);
+        intro.setText("Start from the level where your church is ready to use ChurchCare. You do not need to wait for higher levels of your church to join.");
+        intro.setTextColor(ink); intro.setTextSize(15); intro.setPadding(dp(12),dp(10),dp(12),dp(12)); root.addView(intro);
+
+        TextView churchLabel=new TextView(this); churchLabel.setText("1. Pick your church"); churchLabel.setTextColor(blue); churchLabel.setTextSize(15); churchLabel.setTypeface(null,1); root.addView(churchLabel);
         Spinner templates=new Spinner(this);
-        templates.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,setupTemplateNames)); root.addView(templates);
-        EditText levels=new EditText(this); levels.setMinLines(3); levels.setGravity(Gravity.TOP); levels.setHint("Levels highest to lowest, separated by >"); root.addView(levels);
-        TextView help=new TextView(this); help.setText("You may edit, add, remove or reorder these levels. Unverified templates show suggested terms only; confirm the actual order with your church. You can start at any level."); help.setTextColor(muted); help.setTextSize(13); root.addView(help);
-        EditText unit=new EditText(this); unit.setSingleLine(true); unit.setHint("Your starting branch / unit name *"); root.addView(unit);
-        EditText level=new EditText(this); level.setSingleLine(true); level.setHint("Level of your starting unit *"); root.addView(level);
+        templates.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,setupTemplateNames));
+        root.addView(templates);
+
+        EditText customChurch=new EditText(this); customChurch.setSingleLine(true); customChurch.setHint("Enter your church's name");
+        customChurch.setVisibility(View.GONE); root.addView(customChurch);
+
+        TextView levelLabel=new TextView(this); levelLabel.setText("2. Pick your church's hierarchical level"); levelLabel.setTextColor(blue); levelLabel.setTextSize(15); levelLabel.setTypeface(null,1);
+        LinearLayout.LayoutParams llp=new LinearLayout.LayoutParams(-1,-2); llp.topMargin=dp(12); root.addView(levelLabel,llp);
+        Spinner levelPicker=new Spinner(this); root.addView(levelPicker);
+        EditText customLevel=new EditText(this); customLevel.setSingleLine(true); customLevel.setHint("Enter the level name used by your church"); customLevel.setVisibility(View.GONE); root.addView(customLevel);
+        TextView levelHelp=new TextView(this); levelHelp.setTextColor(muted); levelHelp.setTextSize(12); root.addView(levelHelp);
+
+        TextView unitLabel=new TextView(this); unitLabel.setText("3. Name your branch or unit"); unitLabel.setTextColor(blue); unitLabel.setTextSize(15); unitLabel.setTypeface(null,1);
+        LinearLayout.LayoutParams ulp=new LinearLayout.LayoutParams(-1,-2); ulp.topMargin=dp(12); root.addView(unitLabel,ulp);
+        EditText unit=new EditText(this); unit.setSingleLine(true); unit.setHint("e.g. Charity Assembly"); root.addView(unit);
+
+        final String otherChoice="Other — enter a level";
         templates.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> p,View v,int position,long id) {
-                String[] chosen=setupTemplateLevels[position];
-                if(chosen.length>0 && chosen[0].length()>0) levels.setText(android.text.TextUtils.join(" > ",chosen));
-                else if(position==0) levels.setText("");
-                if(chosen.length>0 && chosen[0].length()>0 && level.getText().toString().trim().isEmpty()) level.setText(chosen[chosen.length-1]);
+                boolean addingChurch=position==0;
+                customChurch.setVisibility(addingChurch?View.VISIBLE:View.GONE);
+                String[] choices=setupTemplateLevelChoices[position];
+                java.util.ArrayList<String> options=new java.util.ArrayList<>();
+                for(String choice:choices) options.add(choice);
+                options.add(otherChoice);
+                levelPicker.setAdapter(new ArrayAdapter<String>(MainActivity.this,android.R.layout.simple_spinner_dropdown_item,options));
+                boolean hasOrderedLevels=setupTemplateLevels[position].length>0;
+                if(addingChurch || choices.length==0) {
+                    customLevel.setVisibility(View.VISIBLE);
+                    levelHelp.setText("Enter the level name used by your church. You can begin at this level independently.");
+                } else if(hasOrderedLevels) {
+                    customLevel.setVisibility(View.GONE);
+                    levelHelp.setText("Choose the level where your branch or unit belongs. The listed structure is a suggested starting point for this church.");
+                } else {
+                    customLevel.setVisibility(View.GONE);
+                    levelHelp.setText("These level names are suggestions; their exact order is not confirmed. Choose the level that applies to your branch or unit.");
+                }
             }
             @Override public void onNothingSelected(AdapterView<?> p) {}
         });
-        Button create=new Button(this); create.setText("Review and create ChurchCare space"); create.setAllCaps(false); root.addView(create);
+        levelPicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> p,View v,int position,long id) {
+                String selected=String.valueOf(levelPicker.getSelectedItem());
+                boolean needsCustom=selected.equals(otherChoice);
+                customLevel.setVisibility(needsCustom?View.VISIBLE:View.GONE);
+            }
+            @Override public void onNothingSelected(AdapterView<?> p) {}
+        });
+
+        Button create=new Button(this); create.setText("Review and create ChurchCare profile"); create.setAllCaps(false); root.addView(create);
         create.setOnClickListener(v -> {
-            String cn=church.getText().toString().trim(), un=unit.getText().toString().trim(), ln=level.getText().toString().trim(), raw=levels.getText().toString().trim();
-            if(cn.isEmpty()||un.isEmpty()||ln.isEmpty()||raw.isEmpty()) { Toast.makeText(this,"Complete the church, starting unit, level and structure fields.",Toast.LENGTH_LONG).show(); return; }
-            String[] parts=raw.split("\\s*>\\s*"); JSONArray structure=new JSONArray(); boolean levelFound=false;
-            for(String part:parts) { String item=part.trim(); if(!item.isEmpty()) { structure.put(item); if(item.equalsIgnoreCase(ln)) levelFound=true; } }
-            if(structure.length()==0||!levelFound) { Toast.makeText(this,"The starting unit level must appear in the structure list.",Toast.LENGTH_LONG).show(); return; }
-            int pos=templates.getSelectedItemPosition(); StringBuilder preview=new StringBuilder();
-            for(int i=0;i<structure.length();i++) { if(i>0) preview.append(" → "); preview.append(structure.optString(i)); }
+            int pos=templates.getSelectedItemPosition();
+            boolean addingChurch=pos==0;
+            String churchName=addingChurch?customChurch.getText().toString().trim():setupTemplateNames[pos];
+            String unitName=unit.getText().toString().trim();
+            String picked=levelPicker.getSelectedItem()==null?"":String.valueOf(levelPicker.getSelectedItem());
+            String levelName=(addingChurch || picked.equals(otherChoice) || setupTemplateLevelChoices[pos].length==0)
+                ?customLevel.getText().toString().trim():picked;
+            if(churchName.isEmpty()||unitName.isEmpty()||levelName.isEmpty()) {
+                Toast.makeText(this,"Enter your church name, hierarchical level and branch/unit name.",Toast.LENGTH_LONG).show(); return;
+            }
+            JSONArray structure=new JSONArray();
+            String[] knownOrder=setupTemplateLevels[pos];
+            boolean selectedInKnownOrder=false;
+            for(String known:knownOrder) if(known.equalsIgnoreCase(levelName)) selectedInKnownOrder=true;
+            if(!addingChurch && selectedInKnownOrder) {
+                for(String known:knownOrder) structure.put(known);
+            } else {
+                structure.put(levelName);
+            }
             String templateId=setupTemplateIds[pos]; int templateVersion=setupTemplateVersions[pos];
-            new AlertDialog.Builder(this).setTitle("Review your church structure")
-                .setMessage("Church: "+cn+"\nStarting unit: "+un+" ("+ln+")\n\n"+preview+"\n\nThis is a private copy for your church. Later changes can be proposed by users and published only by authorised people.")
+            new AlertDialog.Builder(this).setTitle("Review your church profile")
+                .setMessage("Church: "+churchName+"\nHierarchical level: "+levelName+"\nBranch / unit: "+unitName+"\n\nYour profile will begin at this level. It can operate independently while other levels of the same church are not yet using ChurchCare. This setup does not connect it to a different church.")
                 .setNegativeButton("Edit",null).setPositiveButton("Confirm",(dialog,which)->{
-                    try { database.saveChurchSetup(cn,un,ln,templateId,structure.toString(),templateVersion); showHome(); }
+                    try { database.saveChurchSetup(churchName,unitName,levelName,templateId,structure.toString(),templateVersion); showHome(); }
                     catch(Exception e) { android.util.Log.e("ChurchCare","Setup failed",e); Toast.makeText(this,"Could not save setup. Please try again.",Toast.LENGTH_LONG).show(); }
                 }).show();
         });
