@@ -61,7 +61,9 @@ public final class MainActivity extends Activity {
     private String photoRecordId;
     private String photoColumn;
 
-    private interface SetupLevelAdder { void add(String initial); }\n\n    private static final class Field {
+    private interface SetupLevelAdder { void add(String initial); }
+
+    private static final class Field {
         final String label, key; final int type; final boolean required;
         Field(String label, String key, int type, boolean required) { this.label=label; this.key=key; this.type=type; this.required=required; }
     }
