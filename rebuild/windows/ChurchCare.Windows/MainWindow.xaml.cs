@@ -106,7 +106,11 @@ public sealed partial class MainWindow : Window
             {
                 var panel = new StackPanel { Spacing = 2, Padding = new Thickness(12) };
                 panel.Children.Add(new TextBlock { Text = member.Name, FontSize = 17, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-                panel.Children.Add(new TextBlock { Text = string.Join("  •  ", new[] { member.Phone, member.Email, member.Status }.Where(x => !string.IsNullOrWhiteSpace(x))), FontSize = 13, Foreground = new SolidColorBrush(Color.FromArgb(255, 102, 112, 133)) });
+                panel.Children.Add(new TextBlock { Text = string.Join("  •  ", new[] { member.Phone, member.Email, member.Status, member.Address }.Where(x => !string.IsNullOrWhiteSpace(x))), FontSize = 13, Foreground = new SolidColorBrush(Color.FromArgb(255, 102, 112, 133)) });
+                var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 8, 0, 0) };
+                actions.Children.Add(MakeButton("Edit", async () => await EditMemberDialogAsync(member.Id, member.Name, member.Phone, member.Email, member.Address, member.Status)));
+                actions.Children.Add(MakeButton("Archive", async () => await ArchiveMemberAsync(member.Id, member.Name)));
+                panel.Children.Add(actions);
                 list.Children.Add(new Border { Child = panel, CornerRadius = new CornerRadius(8), BorderBrush = new SolidColorBrush(Color.FromArgb(255, 225, 231, 238)), BorderThickness = new Thickness(1) });
             }
             if (list.Children.Count == 0) list.Children.Add(new TextBlock { Text = "No members found. Add your first member to begin.", Margin = new Thickness(0, 12, 0, 0) });
@@ -206,6 +210,42 @@ public sealed partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(name.Text)) { await ShowMessageAsync("Enter the member's name."); return; }
         _database.AddMember(name.Text.Trim(), phone.Text.Trim(), email.Text.Trim());
         RenderPage(_currentPage == "Dashboard" ? "Dashboard" : "Members");
+    }
+
+    private async Task EditMemberDialogAsync(long id, string currentName, string currentPhone, string currentEmail, string currentAddress, string currentStatus)
+    {
+        var name = new TextBox { Header = "Full name", Text = currentName };
+        var phone = new TextBox { Header = "Phone number", Text = currentPhone };
+        var email = new TextBox { Header = "Email address", Text = currentEmail };
+        var address = new TextBox { Header = "Address", Text = currentAddress };
+        var status = new ComboBox { Header = "Membership status", Width = 320 };
+        foreach (var value in new[] { "Active", "Inactive", "Transferred", "Deceased" })
+            status.Items.Add(new ComboBoxItem { Content = value });
+        status.SelectedIndex = Math.Max(0, status.Items.OfType<ComboBoxItem>().ToList().FindIndex(item => string.Equals(item.Content?.ToString(), currentStatus, StringComparison.OrdinalIgnoreCase)));
+        var panel = new StackPanel { Spacing = 10 };
+        panel.Children.Add(name); panel.Children.Add(phone); panel.Children.Add(email); panel.Children.Add(address); panel.Children.Add(status);
+        var dialog = new ContentDialog { XamlRoot = PageHost.XamlRoot, Title = "Edit member", Content = panel, PrimaryButtonText = "Save changes", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        if (string.IsNullOrWhiteSpace(name.Text)) { await ShowMessageAsync("Enter the member's name."); return; }
+        var selectedStatus = (status.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Active";
+        _database.UpdateMember(id, name.Text.Trim(), phone.Text.Trim(), email.Text.Trim(), address.Text.Trim(), selectedStatus);
+        RenderPage("Members");
+    }
+
+    private async Task ArchiveMemberAsync(long id, string name)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = PageHost.XamlRoot,
+            Title = "Archive member?",
+            Content = $"'{name}' will be removed from the active member list. The record will remain in the local database.",
+            PrimaryButtonText = "Archive",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        _database.ArchiveMember(id, name);
+        RenderPage("Members");
     }
 
     private async Task ShowMessageAsync(string message)
