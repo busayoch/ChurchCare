@@ -148,6 +148,37 @@ public final class MainActivity extends Activity {
         setContentView(root);
     }
 
+    private String[] setupTemplateNames = new String[]{"Build my own structure"};
+    private String[] setupTemplateIds = new String[]{"custom"};
+    private int[] setupTemplateVersions = new int[]{0};
+    private String[][] setupTemplateLevels = new String[][]{new String[0]};
+
+    private void loadChurchTemplateOptions() {
+        java.util.ArrayList<String> names=new java.util.ArrayList<>();
+        java.util.ArrayList<String> ids=new java.util.ArrayList<>();
+        java.util.ArrayList<Integer> versions=new java.util.ArrayList<>();
+        java.util.ArrayList<String[]> structures=new java.util.ArrayList<>();
+        names.add("Build my own structure"); ids.add("custom"); versions.add(0); structures.add(new String[0]);
+        try (InputStream in=getAssets().open("church-organisation-templates.v1.json")) {
+            ByteArrayOutputStream out=new ByteArrayOutputStream(); byte[] buffer=new byte[4096]; int n;
+            while((n=in.read(buffer))!=-1) out.write(buffer,0,n);
+            JSONObject catalog=new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));
+            JSONArray templates=catalog.getJSONArray("templates");
+            for(int i=0;i<templates.length();i++) {
+                JSONObject item=templates.getJSONObject(i);
+                names.add(item.optString("name")+" — "+item.optString("status"));
+                ids.add(item.optString("id")); versions.add(item.optInt("version",1));
+                JSONArray levels=item.optJSONArray("levelsHighestToLowest");
+                java.util.ArrayList<String> levelNames=new java.util.ArrayList<>();
+                if(levels!=null) for(int j=0;j<levels.length();j++) levelNames.add(levels.optString(j));
+                structures.add(levelNames.toArray(new String[0]));
+            }
+        } catch(Exception error) { android.util.Log.e("ChurchCare","Could not load template catalogue",error); }
+        setupTemplateNames=names.toArray(new String[0]); setupTemplateIds=ids.toArray(new String[0]);
+        setupTemplateVersions=new int[versions.size()]; setupTemplateLevels=structures.toArray(new String[0][]);
+        for(int i=0;i<versions.size();i++) setupTemplateVersions[i]=versions.get(i);
+    }
+
     private void showChurchSetup() {
         base("Set up your church", "Choose a suggested structure or build your own");
         TextView intro=new TextView(this);
@@ -155,11 +186,7 @@ public final class MainActivity extends Activity {
         intro.setTextColor(ink); intro.setTextSize(15); intro.setPadding(dp(14),dp(14),dp(14),dp(14)); root.addView(intro);
         EditText church=new EditText(this); church.setSingleLine(true); church.setHint("Church name *"); root.addView(church);
         Spinner templates=new Spinner(this);
-        String[] names={"Build my own structure","RCCG — community-confirmed","Assemblies of God Nigeria — draft","Nigerian Baptist Convention — draft","Methodist Church Nigeria — draft","Christ Embassy / Believers' LoveWorld — review","MFM — review","Living Faith — review","CAC — review","Church of Nigeria Anglican — draft","Catholic Church — research pending"};
-        String[] ids={"custom","rccg-ng-community-working","assemblies-of-god-ng-draft","nigerian-baptist-convention-draft","methodist-church-nigeria-draft","christ-embassy-ng-review","mfm-ng-review","living-faith-ng-review","cac-ng-review","church-of-nigeria-anglican-draft","catholic-ng-research"};
-        String[][] suggestions={
-            {},{"National","Region","Province","Zone","Area","Parish"},{"General Council","District","Section","Branch"},{"Convention","Conference","Association","Local Baptist Church"},{"Conference","Archdiocese","Diocese","Circuit","Local Church"},{},{""},{"","",""},{"","",""},{"Province","Diocese","Archdeaconry","Parish","Congregation"},{}
-        };
+        templates.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,setupTemplateNames)); root.addView(templates);
         templates.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,names)); root.addView(templates);
         EditText levels=new EditText(this); levels.setMinLines(3); levels.setGravity(Gravity.TOP); levels.setHint("Levels highest to lowest, separated by >"); root.addView(levels);
         TextView help=new TextView(this); help.setText("You may edit, add, remove or reorder these levels. Unverified templates show suggested terms only; confirm the actual order with your church. You can start at any level."); help.setTextColor(muted); help.setTextSize(13); root.addView(help);
@@ -167,7 +194,7 @@ public final class MainActivity extends Activity {
         EditText level=new EditText(this); level.setSingleLine(true); level.setHint("Level of your starting unit *"); root.addView(level);
         templates.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> p,View v,int position,long id) {
-                String[] chosen=suggestions[position];
+                String[] chosen=setupTemplateLevels[position];
                 if(chosen.length>0 && chosen[0].length()>0) levels.setText(android.text.TextUtils.join(" > ",chosen));
                 else if(position==0) levels.setText("");
                 if(chosen.length>0 && chosen[0].length()>0 && level.getText().toString().trim().isEmpty()) level.setText(chosen[chosen.length-1]);
@@ -183,7 +210,7 @@ public final class MainActivity extends Activity {
             if(structure.length()==0||!levelFound) { Toast.makeText(this,"The starting unit level must appear in the structure list.",Toast.LENGTH_LONG).show(); return; }
             int pos=templates.getSelectedItemPosition(); StringBuilder preview=new StringBuilder();
             for(int i=0;i<structure.length();i++) { if(i>0) preview.append(" → "); preview.append(structure.optString(i)); }
-            String templateId=ids[pos]; int templateVersion=1;
+            String templateId=setupTemplateIds[pos]; int templateVersion=setupTemplateVersions[pos];
             new AlertDialog.Builder(this).setTitle("Review your church structure")
                 .setMessage("Church: "+cn+"\nStarting unit: "+un+" ("+ln+")\n\n"+preview+"\n\nThis is a private copy for your church. Later changes can be proposed by users and published only by authorised people.")
                 .setNegativeButton("Edit",null).setPositiveButton("Confirm",(dialog,which)->{
