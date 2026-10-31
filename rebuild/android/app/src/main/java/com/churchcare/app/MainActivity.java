@@ -792,9 +792,9 @@ public final class MainActivity extends Activity {
             Button signOut = new Button(this);
             signOut.setText("Sign out of ChurchCare account"); signOut.setAllCaps(false);
             signOut.setOnClickListener(v -> {
+                // Sign out only from Firebase. Do not clear the separate Google/Drive authorization state.
                 FirebaseAuth.getInstance().signOut();
-                GoogleSignIn.getClient(this,firebaseGoogleSignInOptions()).signOut()
-                    .addOnCompleteListener(done -> showSettings());
+                showSettings();
             });
             content.addView(signOut);
         }
