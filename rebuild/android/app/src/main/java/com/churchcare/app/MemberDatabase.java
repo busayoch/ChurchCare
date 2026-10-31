@@ -22,7 +22,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
     private static final String DB_NAME = "churchcare_local.db";
     private static final int DB_VERSION = 6;
     private static final Set<String> TABLES = new HashSet<>(Arrays.asList(
-        "members", "organizations", "appointments", "delegations", "appointment_reporting", "governance_audit", "visits", "care_records"
+        "members", "organizations", "appointments", "delegations", "visits", "care_records"
     ));
 
     public MemberDatabase(Context context) {
