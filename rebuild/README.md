@@ -58,3 +58,11 @@ The denomination research catalogue and machine-readable seed are stored in:
 - `assets/church-organisation-templates.v1.json`
 
 These are research/configuration inputs, not yet a claim that every template is fully verified or already selectable in the Android UI. The catalogue distinguishes confirmed working configurations from drafts and unverified vocabulary. Leadership titles remain separate from organisational levels. Template adoption creates a church-specific copy; shared updates never overwrite active church configurations. Any user may propose changes, while only authorised reviewers can publish them.
+
+## Android first-run organisational template builder
+
+The Android first-run setup now reads the bundled denomination catalogue from `app/src/main/assets/church-organisation-templates.v1.json`. A user can select a listed starting template or build a custom structure, edit the suggested level names/order, identify the level of the first local unit, and review the proposed configuration before creating the church's private copy.
+
+Templates with an unverified sequence intentionally do not prefill a hierarchy. The user must enter and confirm the actual order. The RCCG entry is labelled as a community-confirmed working configuration for one RCCG context, not a universal denomination-wide rule.
+
+Database schema version 5 stores the selected template ID, adopted structure JSON, configuration version and template version with the local church profile. A configuration-suggestions table is prepared and included in backup/restore. The in-app proposal submission, authorised review and publication screens are **not yet implemented**; they remain a subsequent milestone. This build must not be described as providing live multi-user approvals or cross-device governance.
