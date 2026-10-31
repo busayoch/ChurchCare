@@ -222,8 +222,9 @@ public final class MainActivity extends Activity {
         form.addView(structureHelp);
         LinearLayout levelRows=new LinearLayout(this); levelRows.setOrientation(LinearLayout.VERTICAL); form.addView(levelRows);
         Button addLevel=new Button(this); addLevel.setText("＋ Add another level"); addLevel.setAllCaps(false); form.addView(addLevel);
-        Spinner levelPicker=new Spinner(this); form.addView(levelPicker);
-        TextView levelPickerLabel=new TextView(this); levelPickerLabel.setText("Starting level for this registration"); levelPickerLabel.setTextColor(blue); levelPickerLabel.setTypeface(null,1); form.addView(levelPickerLabel);
+        Spinner levelPicker=new Spinner(this); levelPicker.setVisibility(View.GONE); form.addView(levelPicker);
+        TextView levelPickerLabel=new TextView(this); levelPickerLabel.setText("Pick your church level"); levelPickerLabel.setTextColor(blue); levelPickerLabel.setTypeface(null,1); form.addView(levelPickerLabel);
+        RadioGroup levelRadioGroup=new RadioGroup(this); levelRadioGroup.setOrientation(LinearLayout.VERTICAL); form.addView(levelRadioGroup);
 
         EditText customLevel=new EditText(this); customLevel.setSingleLine(true); customLevel.setHint("Enter a level name");
         customLevel.setVisibility(View.GONE); form.addView(customLevel);
@@ -243,9 +244,22 @@ public final class MainActivity extends Activity {
                 String value=field.getText().toString().trim();
                 if(!value.isEmpty()) names.add(value);
             }
+            String previouslySelected=levelRadioGroup.getCheckedRadioButtonId()==View.NO_ID?"":String.valueOf(((RadioButton)findViewById(levelRadioGroup.getCheckedRadioButtonId())).getText());
             refreshing[0]=true;
             levelPicker.setAdapter(new ArrayAdapter<String>(MainActivity.this,android.R.layout.simple_spinner_dropdown_item,names));
             refreshing[0]=false;
+            levelRadioGroup.removeAllViews();
+            for(String name:names) {
+                RadioButton option=new RadioButton(MainActivity.this);
+                option.setText(name);
+                option.setTextColor(ink);
+                option.setTextSize(15);
+                option.setPadding(dp(4),dp(5),dp(4),dp(5));
+                levelRadioGroup.addView(option);
+                if(name.equals(previouslySelected)) option.setChecked(true);
+            }
+            if(levelRadioGroup.getCheckedRadioButtonId()==View.NO_ID && !names.isEmpty())
+                ((RadioButton)levelRadioGroup.getChildAt(0)).setChecked(true);
         };
 
         SetupLevelAdder addCustomLevel=(initial)->{
@@ -298,7 +312,7 @@ public final class MainActivity extends Activity {
                     addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
                     structureHelp.setText("For a church you add yourself, enter every level from highest to lowest. Use the arrows to change the order and × to remove a level.");
                     levelPickerLabel.setText("Starting level for this registration");
-                    levelPicker.setVisibility(View.VISIBLE); customLevel.setVisibility(View.GONE);
+                    levelRadioGroup.setVisibility(View.VISIBLE); customLevel.setVisibility(View.GONE);
                 } else {
                     String[] known=setupTemplateLevels[position];
                     String[] choices=setupTemplateLevelChoices[position];
@@ -337,7 +351,8 @@ public final class MainActivity extends Activity {
                 }
                 ordered.add(name); structure.put(name);
             }
-            String startingLevel=levelPicker.getSelectedItem()==null?"":String.valueOf(levelPicker.getSelectedItem());
+            int selectedLevelId=levelRadioGroup.getCheckedRadioButtonId();
+            String startingLevel=selectedLevelId==View.NO_ID?"":String.valueOf(((RadioButton)findViewById(selectedLevelId)).getText());
             if(churchName.isEmpty()||unitName.isEmpty()||ordered.isEmpty()||startingLevel.isEmpty()) {
                 Toast.makeText(this,"Enter the church name, define at least one level, select the starting level and name the branch/unit.",Toast.LENGTH_LONG).show(); return;
             }
