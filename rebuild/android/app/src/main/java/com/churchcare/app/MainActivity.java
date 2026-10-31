@@ -61,7 +61,7 @@ public final class MainActivity extends Activity {
     private String photoRecordId;
     private String photoColumn;
 
-    private static final class Field {
+    private interface SetupLevelAdder { void add(String initial); }\n\n    private static final class Field {
         final String label, key; final int type; final boolean required;
         Field(String label, String key, int type, boolean required) { this.label=label; this.key=key; this.type=type; this.required=required; }
     }
@@ -246,7 +246,7 @@ public final class MainActivity extends Activity {
             refreshing[0]=false;
         };
 
-        java.util.function.Consumer<String> addCustomLevel=(initial)->{
+        SetupLevelAdder addCustomLevel=(initial)->{
             LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
             EditText field=new EditText(this); field.setSingleLine(true); field.setHint("Level name (e.g. District)");
             field.setText(initial==null?"":initial);
@@ -282,7 +282,7 @@ public final class MainActivity extends Activity {
             refreshCustomLevels.run();
         };
 
-        addLevel.setOnClickListener(v->addCustomLevel.accept(""));
+        addLevel.setOnClickListener(v->addCustomLevel.add(""));
         addCustomLevel.accept("");
 
         templates.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
