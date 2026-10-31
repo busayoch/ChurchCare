@@ -42,8 +42,11 @@ public sealed class ChurchDatabase
                 full_name TEXT NOT NULL,
                 phone TEXT NOT NULL DEFAULT '',
                 email TEXT NOT NULL DEFAULT '',
+                address TEXT NOT NULL DEFAULT '',
                 membership_status TEXT NOT NULL DEFAULT 'Active',
-                created_at TEXT NOT NULL
+                deleted INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS appointments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,6 +75,25 @@ public sealed class ChurchDatabase
             );
             """;
         command.ExecuteNonQuery();
+        EnsureColumn(connection, "members", "address", "TEXT NOT NULL DEFAULT ''");
+        EnsureColumn(connection, "members", "deleted", "INTEGER NOT NULL DEFAULT 0");
+        EnsureColumn(connection, "members", "updated_at", "TEXT NOT NULL DEFAULT ''");
+    }
+
+    private static void EnsureColumn(SqliteConnection connection, string table, string column, string definition)
+    {
+        using var check = connection.CreateCommand();
+        check.CommandText = $"PRAGMA table_info({table})";
+        using var reader = check.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+        reader.Close();
+        using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition}";
+        alter.ExecuteNonQuery();
     }
 
     private SqliteConnection Open()
@@ -163,26 +185,55 @@ public sealed class ChurchDatabase
 
     public void AddMember(string name, string phone, string email)
     {
+        var now = DateTimeOffset.UtcNow.ToString("O");
         using var c = Open();
         using var q = c.CreateCommand();
-        q.CommandText = "INSERT INTO members(full_name,phone,email,created_at) VALUES($name,$phone,$email,$created)";
+        q.CommandText = "INSERT INTO members(full_name,phone,email,created_at,updated_at) VALUES($name,$phone,$email,$created,$updated)";
         q.Parameters.AddWithValue("$name", name);
         q.Parameters.AddWithValue("$phone", phone);
         q.Parameters.AddWithValue("$email", email);
-        q.Parameters.AddWithValue("$created", DateTimeOffset.UtcNow.ToString("O"));
+        q.Parameters.AddWithValue("$created", now);
+        q.Parameters.AddWithValue("$updated", now);
         q.ExecuteNonQuery();
         Log("Added member: " + name);
     }
 
-    public List<(long Id, string Name, string Phone, string Email, string Status)> GetMembers(string search = "")
+    public void UpdateMember(long id, string name, string phone, string email, string address, string status)
     {
         using var c = Open();
         using var q = c.CreateCommand();
-        q.CommandText = "SELECT id,full_name,phone,email,membership_status FROM members WHERE full_name LIKE $search OR phone LIKE $search ORDER BY full_name";
+        q.CommandText = "UPDATE members SET full_name=$name,phone=$phone,email=$email,address=$address,membership_status=$status,updated_at=$updated WHERE id=$id AND deleted=0";
+        q.Parameters.AddWithValue("$id", id);
+        q.Parameters.AddWithValue("$name", name);
+        q.Parameters.AddWithValue("$phone", phone);
+        q.Parameters.AddWithValue("$email", email);
+        q.Parameters.AddWithValue("$address", address);
+        q.Parameters.AddWithValue("$status", status);
+        q.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O"));
+        q.ExecuteNonQuery();
+        Log("Updated member: " + name);
+    }
+
+    public void ArchiveMember(long id, string name)
+    {
+        using var c = Open();
+        using var q = c.CreateCommand();
+        q.CommandText = "UPDATE members SET deleted=1,updated_at=$updated WHERE id=$id AND deleted=0";
+        q.Parameters.AddWithValue("$id", id);
+        q.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O"));
+        q.ExecuteNonQuery();
+        Log("Archived member: " + name);
+    }
+
+    public List<(long Id, string Name, string Phone, string Email, string Status, string Address)> GetMembers(string search = "")
+    {
+        using var c = Open();
+        using var q = c.CreateCommand();
+        q.CommandText = "SELECT id,full_name,phone,email,membership_status,address FROM members WHERE deleted=0 AND (full_name LIKE $search OR phone LIKE $search OR email LIKE $search) ORDER BY full_name";
         q.Parameters.AddWithValue("$search", "%" + search + "%");
         using var r = q.ExecuteReader();
-        var rows = new List<(long,string,string,string,string)>();
-        while (r.Read()) rows.Add((r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4)));
+        var rows = new List<(long,string,string,string,string,string)>();
+        while (r.Read()) rows.Add((r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5)));
         return rows;
     }
 
@@ -192,7 +243,9 @@ public sealed class ChurchDatabase
         if (!allowed.Contains(table)) return 0;
         using var c = Open();
         using var q = c.CreateCommand();
-        q.CommandText = "SELECT COUNT(*) FROM " + table;
+        q.CommandText = table == "members"
+            ? "SELECT COUNT(*) FROM members WHERE deleted=0"
+            : "SELECT COUNT(*) FROM " + table;
         return Convert.ToInt32(q.ExecuteScalar());
     }
 
