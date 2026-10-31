@@ -210,8 +210,9 @@ public sealed partial class MainWindow : Window
         var stack = new StackPanel { Spacing = 6 };
         stack.Children.Add(new TextBlock { Text = value, FontSize = 28, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         stack.Children.Add(new TextBlock { Text = label, FontSize = 13, Foreground = new SolidColorBrush(Color.FromArgb(255, 102, 112, 133)) });
-        grid.Children.Add(new Border { Child = stack, Padding = new Thickness(16), CornerRadius = new CornerRadius(10), Background = new SolidColorBrush(Color.FromArgb(255, 244, 248, 252)) });
-        Grid.SetColumn(grid.Children[^1], column);
+        var card = new Border { Child = stack, Padding = new Thickness(16), CornerRadius = new CornerRadius(10), Background = new SolidColorBrush(Color.FromArgb(255, 244, 248, 252)) };
+        Grid.SetColumn(card, column);
+        grid.Children.Add(card);
     }
 
     private static Color ParseColor(string hex)
