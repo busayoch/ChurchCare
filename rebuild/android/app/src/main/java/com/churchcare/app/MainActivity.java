@@ -251,6 +251,7 @@ public final class MainActivity extends Activity {
             levelRadioGroup.removeAllViews();
             for(String name:names) {
                 RadioButton option=new RadioButton(MainActivity.this);
+                option.setId(View.generateViewId());
                 option.setText(name);
                 option.setTextColor(ink);
                 option.setTextSize(15);
