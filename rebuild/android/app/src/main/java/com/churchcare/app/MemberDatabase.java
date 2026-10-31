@@ -400,7 +400,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             }
             if (incoming.containsKey("church_profile")) db.delete("church_profile", null, null);
             if (incoming.containsKey("configuration_suggestions")) db.delete("configuration_suggestions", null, null);
-            for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log","church_profile"}) {
+            for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
                 if (!incoming.containsKey(table)) continue;
                 JSONArray rows = incoming.get(table);
                 for (int i = 0; i < rows.length(); i++) {
