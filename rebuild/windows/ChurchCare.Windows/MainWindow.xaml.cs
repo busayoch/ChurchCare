@@ -88,7 +88,7 @@ public sealed partial class MainWindow : Window
             var value = entry.Text.Trim();
             if (value.Length == 0) return;
             try { _database.AddLevel(value); RenderPage("Structure"); }
-            catch { ShowMessageAsync("That level could not be added. Check that its name is not already in the structure."); }
+            catch { _ = ShowMessageAsync("That level could not be added. Check that its name is not already in the structure."); }
         }));
     }
 
@@ -131,7 +131,7 @@ public sealed partial class MainWindow : Window
         PageHost.Children.Add(MakeButton("Open database folder", () =>
         {
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "/select,\"" + _database.DatabasePath + "\"") { UseShellExecute = true }); }
-            catch { ShowMessageAsync("The database folder could not be opened."); }
+            catch { _ = ShowMessageAsync("The database folder could not be opened."); }
         }));
         AddText("A guided backup and restore workflow will be added before this desktop build is considered production-ready.", 13, false, "#8A5A00");
     }
