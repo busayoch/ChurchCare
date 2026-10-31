@@ -67,21 +67,21 @@ public final class MainActivity extends Activity {
     private static final Field[] MEMBER = {
         new Field("Full name", "full_name", InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS, true),
         new Field("Phone number", "phone", PHONE, false),
-        new Field("Church / organization name", "organization", TEXT, false),
+        new Field("Church branch / unit", "organization", TEXT, false),
         new Field("Address / location", "address", TEXT, false),
         new Field("Status (Active / Inactive)", "status", TEXT, false)
     };
     private static final Field[] ORGANIZATION = {
-        new Field("Organization name", "name", TEXT, true),
-        new Field("Level / type (e.g. Zone, Area, Parish)", "type", TEXT, true),
-        new Field("Parent organization name (optional)", "parent_name", TEXT, false),
+        new Field("Branch / unit name", "name", TEXT, true),
+        new Field("Level in the church structure (e.g. District, Region, Parish)", "type", TEXT, true),
+        new Field("Parent branch / unit (optional)", "parent_name", TEXT, false),
         new Field("Location", "location", TEXT, false),
         new Field("Notes", "notes", TEXT, false)
     };
     private static final Field[] APPOINTMENT = {
         new Field("Person / pastor name", "person_name", TEXT, true),
         new Field("Role / title", "role", TEXT, true),
-        new Field("Organization name", "organization_name", TEXT, false),
+        new Field("Church branch / unit", "organization_name", TEXT, false),
         new Field("Start date (YYYY-MM-DD)", "start_date", DATE, false),
         new Field("End date (blank if current)", "end_date", DATE, false),
         new Field("Status (Current / Completed)", "status", TEXT, false),
@@ -90,7 +90,7 @@ public final class MainActivity extends Activity {
     private static final Field[] DELEGATION = {
         new Field("Responsible overseer", "overseer", TEXT, true),
         new Field("Delegate name", "delegate_name", TEXT, true),
-        new Field("Organization / area name", "organization_name", TEXT, false),
+        new Field("Church branch / unit", "organization_name", TEXT, false),
         new Field("Granted scope / authority", "scope", TEXT, true),
         new Field("Start date (YYYY-MM-DD)", "start_date", DATE, false),
         new Field("End date (optional)", "end_date", DATE, false),
@@ -119,7 +119,7 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        try { database = new MemberDatabase(this); showHome(); }
+        try { database = new MemberDatabase(this); if (database.hasChurchSetup()) showHome(); else showChurchSetup(); }
         catch (Throwable error) {
             android.util.Log.e("ChurchCare", "Startup failed", error);
             new AlertDialog.Builder(this).setTitle("ChurchCare could not start")
@@ -132,7 +132,8 @@ public final class MainActivity extends Activity {
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18), dp(16), dp(18), dp(12)); root.setBackgroundColor(paper);
         LinearLayout header = new LinearLayout(this); header.setGravity(Gravity.CENTER_VERTICAL);
-        Button back = new Button(this); back.setText("‹"); back.setOnClickListener(v -> showHome());
+        Button back = new Button(this); back.setText("‹"); back.setOnClickListener(v -> { if (database.hasChurchSetup()) showHome(); else showChurchSetup(); });
+        if (!database.hasChurchSetup()) back.setVisibility(View.GONE);
         header.addView(back, new LinearLayout.LayoutParams(dp(52), -2));
         TextView heading = new TextView(this); heading.setText(title); heading.setTextSize(24); heading.setTextColor(blue); heading.setTypeface(null,1);
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(0,-2,1); hp.leftMargin=dp(8); header.addView(heading,hp);
@@ -143,18 +144,38 @@ public final class MainActivity extends Activity {
         setContentView(root);
     }
 
+    private void showChurchSetup() {
+        base("Set up your church", "Start ChurchCare at the level where your church is ready to begin");
+        TextView intro = new TextView(this);
+        intro.setText("Every church has its own private ChurchCare space. You can begin at national, regional, district, parish or local branch level. You do not need to register the levels above you first.");
+        intro.setTextColor(ink); intro.setTextSize(15); intro.setPadding(dp(14),dp(14),dp(14),dp(14)); intro.setBackgroundColor(0xFFFFFFFF); root.addView(intro);
+        EditText church = new EditText(this); church.setSingleLine(true); church.setHint("Church name *"); church.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS); root.addView(church);
+        EditText unit = new EditText(this); unit.setSingleLine(true); unit.setHint("Your starting branch / unit name *"); unit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS); root.addView(unit);
+        EditText level = new EditText(this); level.setSingleLine(true); level.setHint("What level is this? e.g. Local Branch, District, Region, National *"); level.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES); root.addView(level);
+        TextView note = new TextView(this); note.setText("You can add the other levels and branches later. Leave the parent level unselected if it has not joined ChurchCare yet."); note.setTextColor(muted); note.setTextSize(13); note.setPadding(0,dp(10),0,dp(10)); root.addView(note);
+        Button create = new Button(this); create.setText("Create my ChurchCare space"); create.setAllCaps(false); root.addView(create);
+        create.setOnClickListener(v -> {
+            String churchName = church.getText().toString().trim();
+            String unitName = unit.getText().toString().trim();
+            String levelName = level.getText().toString().trim();
+            if (churchName.isEmpty() || unitName.isEmpty() || levelName.isEmpty()) { Toast.makeText(this, "Complete all three fields to continue.", Toast.LENGTH_LONG).show(); return; }
+            try { database.saveChurchSetup(churchName, unitName, levelName); showHome(); }
+            catch (Exception error) { android.util.Log.e("ChurchCare", "Church setup failed", error); Toast.makeText(this, "Church setup could not be saved. Please try again.", Toast.LENGTH_LONG).show(); }
+        });
+    }
+
     private void showHome() {
-        base("ChurchCare", "Offline-first church and member care");
+        base("ChurchCare", database.churchName() + " • " + database.localUnitName());
         int members=database.count("members"), orgs=database.count("organizations"), openCare=database.count("care_records"), pending=database.pendingChanges();
         TextView welcome = new TextView(this); welcome.setText("Your records stay on this device. Work offline and review pending changes whenever needed."); welcome.setTextSize(15); welcome.setTextColor(ink); welcome.setPadding(dp(14),dp(14),dp(14),dp(14)); welcome.setBackgroundColor(0xFFFFFFFF); root.addView(welcome);
         LinearLayout stats = new LinearLayout(this); stats.setOrientation(LinearLayout.HORIZONTAL);
         stats.addView(stat("Members",String.valueOf(members)),new LinearLayout.LayoutParams(0,-2,1));
-        stats.addView(stat("Church units",String.valueOf(orgs)),new LinearLayout.LayoutParams(0,-2,1));
+        stats.addView(stat("Branches / units",String.valueOf(orgs)),new LinearLayout.LayoutParams(0,-2,1));
         stats.addView(stat("Care cases",String.valueOf(openCare)),new LinearLayout.LayoutParams(0,-2,1));
         LinearLayout.LayoutParams stp=new LinearLayout.LayoutParams(-1,-2); stp.topMargin=dp(10); stp.bottomMargin=dp(8); root.addView(stats,stp);
         ScrollView scroll=new ScrollView(this); LinearLayout menu=new LinearLayout(this); menu.setOrientation(LinearLayout.VERTICAL);
         menuButton(menu,"Members","Register, search, update and review member records",()->showRecords("members"));
-        menuButton(menu,"Church organization","Build and view the Zone / Area / Parish structure",()->showRecords("organizations"));
+        menuButton(menu,"Church branches & units","Build and view your church structure at every level",()->showRecords("organizations"));
         menuButton(menu,"Appointments & transfers","Track roles and retain previous appointments",()->showRecords("appointments"));
         menuButton(menu,"Delegation & authority","Define who can act, for whom, and within what scope",()->showRecords("delegations"));
         menuButton(menu,"Visits & follow-ups","Record pastoral visits and next steps",()->showRecords("visits"));
@@ -397,20 +418,20 @@ public final class MainActivity extends Activity {
         return CARE;
     }
     private String titleFor(String table) {
-        if(table.equals("members"))return "Members"; if(table.equals("organizations"))return "Church organization";
+        if(table.equals("members"))return "Members"; if(table.equals("organizations"))return "Church branches & units";
         if(table.equals("appointments"))return "Appointments & transfers"; if(table.equals("delegations"))return "Delegation & authority";
         if(table.equals("visits"))return "Visits & follow-ups"; return "Care cases & escalation";
     }
     private String subtitleFor(String table) {
         if(table.equals("members"))return "Local member directory. Tap a record to view, edit or archive.";
-        if(table.equals("organizations"))return "Create organization units and link each unit to a parent by name.";
+        if(table.equals("organizations"))return "Build your church structure. Add any level now and link its parent branch/unit when that level is available.";
         if(table.equals("appointments"))return "Keep each appointment as a separate dated record to preserve history.";
         if(table.equals("delegations"))return "Delegation scope is recorded explicitly; it does not grant app-wide access control by itself.";
         if(table.equals("visits"))return "Visit history is limited to the five newest records per member.";
         return "Track priorities, assignments, follow-up dates and care resolution.";
     }
     private String singular(String table) {
-        if(table.equals("members"))return "member"; if(table.equals("organizations"))return "organization";
+        if(table.equals("members"))return "member"; if(table.equals("organizations"))return "church branch / unit";
         if(table.equals("appointments"))return "appointment"; if(table.equals("delegations"))return "delegation";
         if(table.equals("visits"))return "visit"; return "care case";
     }
@@ -432,7 +453,7 @@ public final class MainActivity extends Activity {
     }
     private String recordDetail(String table,Cursor c) {
         if(table.equals("members"))return join(get(c,"phone"),get(c,"organization"),get(c,"status"),get(c,"address"));
-        if(table.equals("organizations"))return join(get(c,"parent_id").isEmpty()?"Top-level organization":"Parent: "+database.findNameById("organizations",get(c,"parent_id")),get(c,"location"),get(c,"notes"));
+        if(table.equals("organizations"))return join(get(c,"parent_id").isEmpty()?"No parent branch/unit linked yet":"Parent: "+database.findNameById("organizations",get(c,"parent_id")),get(c,"location"),get(c,"notes"));
         if(table.equals("appointments"))return join(get(c,"organization_id"),get(c,"start_date")+" → "+(get(c,"end_date").isEmpty()?"Current":get(c,"end_date")),get(c,"status"),get(c,"notes"));
         if(table.equals("delegations"))return join("Scope: "+get(c,"scope"),"Organization ID: "+get(c,"organization_id"),get(c,"status"),get(c,"start_date")+" → "+get(c,"end_date"));
         if(table.equals("visits"))return join("Visitor: "+get(c,"visitor"),"Outcome: "+get(c,"outcome"),"Follow-up: "+get(c,"next_follow_up"),get(c,"notes"));
@@ -443,7 +464,7 @@ public final class MainActivity extends Activity {
             safe(v,"profile_photo_path").isEmpty()?"":"Profile thumbnail saved",
             safe(v,"extra_photo_one_path").isEmpty()?"":"Local photo 1 saved",
             safe(v,"extra_photo_two_path").isEmpty()?"":"Local photo 2 saved");
-        if(table.equals("organizations"))return join(safe(v,"parent_id").isEmpty()?"Top-level organization":"Parent: "+database.findNameById("organizations",safe(v,"parent_id")),safe(v,"location"),safe(v,"notes"));
+        if(table.equals("organizations"))return join(safe(v,"parent_id").isEmpty()?"No parent branch/unit linked yet":"Parent: "+database.findNameById("organizations",safe(v,"parent_id")),safe(v,"location"),safe(v,"notes"));
         if(table.equals("appointments"))return join(safe(v,"organization_id"),safe(v,"start_date")+" → "+(safe(v,"end_date").isEmpty()?"Current":safe(v,"end_date")),safe(v,"status"),safe(v,"notes"));
         if(table.equals("delegations"))return join("Scope: "+safe(v,"scope"),"Organization ID: "+safe(v,"organization_id"),safe(v,"status"),safe(v,"start_date")+" → "+safe(v,"end_date"));
         if(table.equals("visits"))return join("Visitor: "+safe(v,"visitor"),"Outcome: "+safe(v,"outcome"),"Follow-up: "+safe(v,"next_follow_up"),safe(v,"notes"));
@@ -768,6 +789,6 @@ public final class MainActivity extends Activity {
         photoRecordId=null; photoColumn=null;
     }
     private int dp(int value){return (int)(value*getResources().getDisplayMetrics().density+0.5f);}
-    @Override public void onBackPressed(){showHome();}
+    @Override public void onBackPressed(){if(database!=null && database.hasChurchSetup()) showHome(); else if(database!=null) showChurchSetup(); else super.onBackPressed();}
     @Override protected void onDestroy(){if(database!=null)database.close();super.onDestroy();}
 }
