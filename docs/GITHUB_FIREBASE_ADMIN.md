@@ -17,10 +17,11 @@ Android build workflow and does not run on ordinary pushes.
 - Do not grant Project Owner, Editor, or Firebase Admin to this service account.
 - Firestore client rules remain deny-all until the application-specific rules
   are reviewed and deliberately published.
-- The initial Owner is reserved in `system/admin`. Bootstrap is idempotent for
+- The initial Owner is reserved in `system/admin`; role records are stored in
+  `system_roles/{uid}`. Bootstrap is idempotent for
   that same UID and refuses to replace a different registered Owner.
-- The initial Owner account must exist in Firebase Authentication and have a
-  verified email address.
+- The initial Owner account must exist in Firebase Authentication, have a
+  verified email address, and be linked to Google sign-in.
 - The Owner claim is `churchcareRole: "owner"`. A Reviewer claim is
   `churchcareRole: "reviewer"`. Unrelated existing custom claims are preserved.
 
@@ -46,12 +47,15 @@ Android build workflow and does not run on ordinary pushes.
 
 ## Bootstrap the initial Owner
 
-1. Open GitHub → Actions → **ChurchCare Governance Administration**.
-2. Select **Run workflow** on the branch containing this workflow.
-3. Choose `bootstrap-owner`.
-4. Paste the verified Firebase User UID into `target_uid`.
-5. Leave `requester_uid` empty.
-6. Run the workflow and inspect its log for the success message.
+1. Ensure the workflow file has been merged into the repository's default
+   branch. GitHub only offers manual `workflow_dispatch` for workflows present
+   on the default branch.
+2. Open GitHub → Actions → **ChurchCare Governance Administration**.
+3. Select **Run workflow** and choose the branch containing the admin script.
+4. Choose `bootstrap-owner`.
+5. Paste the verified Firebase User UID into `target_uid`.
+6. Leave `requester_uid` empty.
+7. Run the workflow and inspect its log for the success message.
 
 The workflow reserves the first Owner UID before applying the claim. If a run
 is interrupted, rerun bootstrap with the *same UID*. It will not let a different
