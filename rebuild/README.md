@@ -7,9 +7,12 @@ This is the isolated native Android implementation on `rebuild/clean-android-fou
 The Android app uses a local SQLite database as its operational source of truth. It is intended to remain usable without an internet connection.
 
 ### Available screens and local workflows
+- First-run Church setup: enter the church name and the starting branch/unit at any level (for example, Local Branch, District, Region or National). A parent level is optional, so a branch can begin before higher levels have adopted ChurchCare.
+- One independent ChurchCare data space per church installation. The church profile and its first branch/unit are saved together in SQLite.
+- Dashboard identifies the current church and starting branch/unit.
 - Dashboard with local record counts.
 - Member register, search, edit, archive, and local photo selection.
-- Configurable organization units with parent relationships and readable hierarchy paths.
+- Configurable church branches/units with church-defined level names, multiple sibling branches, optional parent relationships and readable hierarchy paths. A parent can be added later when that level is ready.
 - Pastoral appointments; adding a new current appointment closes the previous current appointment while preserving its history.
 - Explicit overseer-to-delegate records with scope, dates, and status.
 - Visit records and follow-up dates, retaining at most the five newest visit records per member.
@@ -27,13 +30,17 @@ The Android app uses a local SQLite database as its operational source of truth.
 - The ChurchCare Community Emblem is configured as the launcher icon. A polished adaptive icon with separately generated foreground/background assets can be refined later.
 - Photo references are stored as local document URIs. ZIP export copies accessible referenced images into the local archive. A future cloud-sync implementation must upload only the profile thumbnail by default and must never automatically upload the two additional photos. The explicit full-backup feature is different: it bundles accessible photos and all local tables.
 
-## Next milestone: decentralised identity and organisation access
+## Current milestone: Church and branch foundation
 
-The approved architectural direction is documented in [Account and Organisation Architecture](ACCOUNT-AND-ORGANIZATION-ARCHITECTURE.md). ChurchCare must support independent adoption by any local organisation, optional consent-based connections to higher/lower organisations, organisation-scoped roles and permissions, and safe disconnection. Authentication and cross-organisation authorization are not yet implemented; do not treat local role labels as a security boundary.
+The approved product direction is documented in [ChurchCare identity, church structure and access architecture](ACCOUNT-AND-ORGANIZATION-ARCHITECTURE.md). User-facing language is Church, Church branch/unit, Church membership, Church administrator, Church connection, Granted authority and Church structure.
 
-## Data safety and migrations
+Different churches are completely separate. Their data is never exchanged or transferred. Within one church, multiple branches can exist at the same level and at multiple levels. A branch can start at any level before its parent has adopted ChurchCare; its parent can be added later without replacing the branch identity.
 
-Schema upgrades are additive. Existing member records are retained when the schema version advances; records are archived using a deleted/tombstone state rather than immediately removed. Visit retention is enforced when a new visit is saved.
+The Android implementation currently provides a local Church profile and starting branch/unit setup, plus the existing local branch hierarchy manager. This is an offline foundation only. Cross-device invitations/vertical connections, account authentication, server-side church isolation and enforced per-user/branch authorization are not yet implemented. Do not describe local roles or local database separation as production multi-user security.
+
+## Data safety and database
+
+The local database now stores a distinct Church profile and its starting branch/unit. The existing `organizations` SQLite table remains an internal technical name for church branches/units; it is not the identity of the Church itself. Schema version 4 adds the Church profile table. Records are archived using a deleted/tombstone state rather than immediately removed. Visit retention is enforced when a new visit is saved.
 
 ## Build
 
