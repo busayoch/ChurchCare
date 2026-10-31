@@ -46,9 +46,14 @@ jobs:
       - name: Restore Windows desktop dependencies
         run: dotnet restore rebuild/windows/ChurchCare.Windows/ChurchCare.Windows.csproj
 
+      - name: Set up Visual Studio MSBuild
+        uses: microsoft/setup-msbuild@v2
+
       - name: Publish native Windows application
         shell: pwsh
-        run: dotnet publish rebuild/windows/ChurchCare.Windows/ChurchCare.Windows.csproj -c Release -r win-x64 --self-contained true -p:WindowsAppSDKSelfContained=true -o "$env:GITHUB_WORKSPACE\publish\ChurchCare"
+        run: |
+          msbuild rebuild/windows/ChurchCare.Windows/ChurchCare.Windows.csproj /restore /t:Publish /p:Configuration=Release /p:RuntimeIdentifier=win-x64 /p:SelfContained=true /p:WindowsAppSDKSelfContained=true /p:PublishDir="$env:GITHUB_WORKSPACE\publish\ChurchCare\"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Show XAML compiler diagnostics if publish fails
         if: failure()
