@@ -193,88 +193,163 @@ public final class MainActivity extends Activity {
 
     private void showChurchSetup() {
         loadChurchTemplateOptions();
-        base("Create your church profile", "Choose your church, select your level and name your branch or unit");
-        TextView intro=new TextView(this);
-        intro.setText("Start from the level where your church is ready to use ChurchCare. You do not need to wait for higher levels of your church to join.");
-        intro.setTextColor(ink); intro.setTextSize(15); intro.setPadding(dp(12),dp(10),dp(12),dp(12)); root.addView(intro);
+        base("Create your church profile", "Choose your church, define its structure and name your starting branch or unit");
 
-        TextView churchLabel=new TextView(this); churchLabel.setText("1. Pick your church"); churchLabel.setTextColor(blue); churchLabel.setTextSize(15); churchLabel.setTypeface(null,1); root.addView(churchLabel);
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(form);
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        TextView intro=new TextView(this);
+        intro.setText("A church can start using ChurchCare at any level. Its other levels and branches can join later without changing this church's identity.");
+        intro.setTextColor(ink); intro.setTextSize(15); intro.setPadding(dp(12),dp(10),dp(12),dp(12)); form.addView(intro);
+
+        TextView churchLabel=new TextView(this); churchLabel.setText("1. Pick your church"); churchLabel.setTextColor(blue); churchLabel.setTextSize(15); churchLabel.setTypeface(null,1); form.addView(churchLabel);
         Spinner templates=new Spinner(this);
         templates.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,setupTemplateNames));
-        root.addView(templates);
+        form.addView(templates);
 
         EditText customChurch=new EditText(this); customChurch.setSingleLine(true); customChurch.setHint("Enter your church's name");
-        customChurch.setVisibility(View.GONE); root.addView(customChurch);
+        customChurch.setVisibility(View.GONE); form.addView(customChurch);
 
-        TextView levelLabel=new TextView(this); levelLabel.setText("2. Pick your church's hierarchical level"); levelLabel.setTextColor(blue); levelLabel.setTextSize(15); levelLabel.setTypeface(null,1);
-        LinearLayout.LayoutParams llp=new LinearLayout.LayoutParams(-1,-2); llp.topMargin=dp(12); root.addView(levelLabel,llp);
-        Spinner levelPicker=new Spinner(this); root.addView(levelPicker);
-        EditText customLevel=new EditText(this); customLevel.setSingleLine(true); customLevel.setHint("Enter the level name used by your church"); customLevel.setVisibility(View.GONE); root.addView(customLevel);
-        TextView levelHelp=new TextView(this); levelHelp.setTextColor(muted); levelHelp.setTextSize(12); root.addView(levelHelp);
+        TextView levelLabel=new TextView(this); levelLabel.setText("2. Define your church's structure (highest level first)"); levelLabel.setTextColor(blue); levelLabel.setTextSize(15); levelLabel.setTypeface(null,1);
+        LinearLayout.LayoutParams llp=new LinearLayout.LayoutParams(-1,-2); llp.topMargin=dp(12); form.addView(levelLabel,llp);
+        TextView structureHelp=new TextView(this); structureHelp.setTextColor(muted); structureHelp.setTextSize(12);
+        structureHelp.setText("Add each organisational level in order, from the highest level down to the local congregation or unit. These are levels, not leadership titles.");
+        form.addView(structureHelp);
+        LinearLayout levelRows=new LinearLayout(this); levelRows.setOrientation(LinearLayout.VERTICAL); form.addView(levelRows);
+        Button addLevel=new Button(this); addLevel.setText("＋ Add another level"); addLevel.setAllCaps(false); form.addView(addLevel);
+        Spinner levelPicker=new Spinner(this); form.addView(levelPicker);
+        TextView levelPickerLabel=new TextView(this); levelPickerLabel.setText("Starting level for this registration"); levelPickerLabel.setTextColor(blue); levelPickerLabel.setTypeface(null,1); form.addView(levelPickerLabel);
 
-        TextView unitLabel=new TextView(this); unitLabel.setText("3. Name your branch or unit"); unitLabel.setTextColor(blue); unitLabel.setTextSize(15); unitLabel.setTypeface(null,1);
-        LinearLayout.LayoutParams ulp=new LinearLayout.LayoutParams(-1,-2); ulp.topMargin=dp(12); root.addView(unitLabel,ulp);
-        EditText unit=new EditText(this); unit.setSingleLine(true); unit.setHint("e.g. Charity Assembly"); root.addView(unit);
+        EditText customLevel=new EditText(this); customLevel.setSingleLine(true); customLevel.setHint("Enter a level name");
+        customLevel.setVisibility(View.GONE); form.addView(customLevel);
+
+        TextView unitLabel=new TextView(this); unitLabel.setText("3. Name the branch or unit being registered"); unitLabel.setTextColor(blue); unitLabel.setTextSize(15); unitLabel.setTypeface(null,1);
+        LinearLayout.LayoutParams ulp=new LinearLayout.LayoutParams(-1,-2); ulp.topMargin=dp(12); form.addView(unitLabel,ulp);
+        EditText unit=new EditText(this); unit.setSingleLine(true); unit.setHint("e.g. Charity Assembly"); form.addView(unit);
 
         final String otherChoice="Other — enter a level";
+        final java.util.ArrayList<EditText> customLevelFields=new java.util.ArrayList<>();
+        final boolean[] customMode={true};
+        final boolean[] refreshing={false};
+
+        Runnable refreshCustomLevels=()->{
+            java.util.ArrayList<String> names=new java.util.ArrayList<>();
+            for(EditText field:customLevelFields) {
+                String value=field.getText().toString().trim();
+                if(!value.isEmpty()) names.add(value);
+            }
+            refreshing[0]=true;
+            levelPicker.setAdapter(new ArrayAdapter<String>(MainActivity.this,android.R.layout.simple_spinner_dropdown_item,names));
+            refreshing[0]=false;
+        };
+
+        java.util.function.Consumer<String> addCustomLevel=(initial)->{
+            LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
+            EditText field=new EditText(this); field.setSingleLine(true); field.setHint("Level name (e.g. District)");
+            field.setText(initial==null?"":initial);
+            row.addView(field,new LinearLayout.LayoutParams(0,-2,1));
+            Button up=new Button(this); up.setText("↑"); up.setAllCaps(false);
+            Button down=new Button(this); down.setText("↓"); down.setAllCaps(false);
+            Button remove=new Button(this); remove.setText("×"); remove.setAllCaps(false);
+            row.addView(up); row.addView(down); row.addView(remove);
+            int index=customLevelFields.size(); customLevelFields.add(field); levelRows.addView(row);
+            field.addTextChangedListener(new android.text.TextWatcher() {
+                public void beforeTextChanged(CharSequence s,int st,int count,int after) {}
+                public void onTextChanged(CharSequence s,int st,int before,int count) { refreshCustomLevels.run(); }
+                public void afterTextChanged(android.text.Editable e) {}
+            });
+            up.setOnClickListener(v->{
+                int at=customLevelFields.indexOf(field); if(at<=0)return;
+                EditText previous=customLevelFields.get(at-1);
+                String a=field.getText().toString(), b=previous.getText().toString();
+                field.setText(b); previous.setText(a);
+                levelPicker.setSelection(Math.max(0,at-1));
+            });
+            down.setOnClickListener(v->{
+                int at=customLevelFields.indexOf(field); if(at<0||at>=customLevelFields.size()-1)return;
+                EditText next=customLevelFields.get(at+1);
+                String a=field.getText().toString(), b=next.getText().toString();
+                field.setText(b); next.setText(a);
+                levelPicker.setSelection(Math.min(customLevelFields.size()-1,at+1));
+            });
+            remove.setOnClickListener(v->{
+                if(customLevelFields.size()<=1) { field.setText(""); return; }
+                customLevelFields.remove(field); levelRows.removeView(row); refreshCustomLevels.run();
+            });
+            refreshCustomLevels.run();
+        };
+
+        addLevel.setOnClickListener(v->addCustomLevel.accept(""));
+        addCustomLevel.accept("");
+
         templates.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> p,View v,int position,long id) {
                 boolean addingChurch=position==0;
                 customChurch.setVisibility(addingChurch?View.VISIBLE:View.GONE);
-                String[] choices=setupTemplateLevelChoices[position];
-                java.util.ArrayList<String> options=new java.util.ArrayList<>();
-                for(String choice:choices) options.add(choice);
-                options.add(otherChoice);
-                levelPicker.setAdapter(new ArrayAdapter<String>(MainActivity.this,android.R.layout.simple_spinner_dropdown_item,options));
-                boolean hasOrderedLevels=setupTemplateLevels[position].length>0;
-                if(addingChurch || choices.length==0) {
-                    customLevel.setVisibility(View.VISIBLE);
-                    levelHelp.setText("Enter the level name used by your church. You can begin at this level independently.");
-                } else if(hasOrderedLevels) {
-                    customLevel.setVisibility(View.GONE);
-                    levelHelp.setText("Choose the level where your branch or unit belongs. The listed structure is a suggested starting point for this church.");
+                customMode[0]=addingChurch;
+                levelRows.removeAllViews(); customLevelFields.clear();
+                if(addingChurch) {
+                    addCustomLevel.accept("");
+                    addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
+                    structureHelp.setText("For a church you add yourself, enter every level from highest to lowest. Use the arrows to change the order and × to remove a level.");
+                    levelPickerLabel.setText("Starting level for this registration");
+                    levelPicker.setVisibility(View.VISIBLE); customLevel.setVisibility(View.GONE);
                 } else {
-                    customLevel.setVisibility(View.GONE);
-                    levelHelp.setText("These level names are suggestions; their exact order is not confirmed. Choose the level that applies to your branch or unit.");
+                    String[] known=setupTemplateLevels[position];
+                    String[] choices=setupTemplateLevelChoices[position];
+                    if(known.length>0) {
+                        for(String name:known) addCustomLevel.accept(name);
+                        addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
+                        structureHelp.setText("This is a suggested starting structure for the selected church. You can rename, add, remove or reorder levels for its local configuration.");
+                        levelPickerLabel.setText("Starting level for this registration");
+                        levelPicker.setVisibility(View.VISIBLE); customLevel.setVisibility(View.GONE);
+                    } else {
+                        addCustomLevel.accept("");
+                        addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
+                        structureHelp.setText("The catalogue does not confirm a complete order for this church. Define the actual order used by your congregation; suggested names are available in the catalogue notes.");
+                        levelPickerLabel.setText("Starting level for this registration");
+                        levelPicker.setVisibility(View.VISIBLE); customLevel.setVisibility(View.GONE);
+                    }
                 }
             }
             @Override public void onNothingSelected(AdapterView<?> p) {}
         });
-        levelPicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> p,View v,int position,long id) {
-                String selected=String.valueOf(levelPicker.getSelectedItem());
-                boolean needsCustom=selected.equals(otherChoice);
-                customLevel.setVisibility(needsCustom?View.VISIBLE:View.GONE);
-            }
-            @Override public void onNothingSelected(AdapterView<?> p) {}
-        });
 
-        Button create=new Button(this); create.setText("Review and create ChurchCare profile"); create.setAllCaps(false); root.addView(create);
+        Button create=new Button(this); create.setText("Review and create ChurchCare profile"); create.setAllCaps(false); form.addView(create);
         create.setOnClickListener(v -> {
             int pos=templates.getSelectedItemPosition();
             boolean addingChurch=pos==0;
             String churchName=addingChurch?customChurch.getText().toString().trim():setupTemplateNames[pos];
             String unitName=unit.getText().toString().trim();
-            String picked=levelPicker.getSelectedItem()==null?"":String.valueOf(levelPicker.getSelectedItem());
-            String levelName=(addingChurch || picked.equals(otherChoice) || setupTemplateLevelChoices[pos].length==0)
-                ?customLevel.getText().toString().trim():picked;
-            if(churchName.isEmpty()||unitName.isEmpty()||levelName.isEmpty()) {
-                Toast.makeText(this,"Enter your church name, hierarchical level and branch/unit name.",Toast.LENGTH_LONG).show(); return;
-            }
             JSONArray structure=new JSONArray();
-            String[] knownOrder=setupTemplateLevels[pos];
-            boolean selectedInKnownOrder=false;
-            for(String known:knownOrder) if(known.equalsIgnoreCase(levelName)) selectedInKnownOrder=true;
-            if(!addingChurch && selectedInKnownOrder) {
-                for(String known:knownOrder) structure.put(known);
-            } else {
-                structure.put(levelName);
+            java.util.ArrayList<String> ordered=new java.util.ArrayList<>();
+            java.util.HashSet<String> unique=new java.util.HashSet<>();
+            for(EditText field:customLevelFields) {
+                String name=field.getText().toString().trim();
+                if(name.isEmpty()) continue;
+                if(!unique.add(name.toLowerCase(Locale.ROOT))) {
+                    Toast.makeText(this,"Each church structure level must have a distinct name.",Toast.LENGTH_LONG).show(); return;
+                }
+                ordered.add(name); structure.put(name);
             }
-            String templateId=setupTemplateIds[pos]; int templateVersion=setupTemplateVersions[pos];
+            String startingLevel=levelPicker.getSelectedItem()==null?"":String.valueOf(levelPicker.getSelectedItem());
+            if(churchName.isEmpty()||unitName.isEmpty()||ordered.isEmpty()||startingLevel.isEmpty()) {
+                Toast.makeText(this,"Enter the church name, define at least one level, select the starting level and name the branch/unit.",Toast.LENGTH_LONG).show(); return;
+            }
+            if(!ordered.contains(startingLevel)) {
+                Toast.makeText(this,"Select a starting level from the structure you defined.",Toast.LENGTH_LONG).show(); return;
+            }
+            String templateId=addingChurch?"custom":setupTemplateIds[pos];
+            int templateVersion=addingChurch?0:setupTemplateVersions[pos];
+            StringBuilder structureText=new StringBuilder();
+            for(int i=0;i<ordered.size();i++) structureText.append(i+1).append(". ").append(ordered.get(i)).append("\n");
             new AlertDialog.Builder(this).setTitle("Review your church profile")
-                .setMessage("Church: "+churchName+"\nHierarchical level: "+levelName+"\nBranch / unit: "+unitName+"\n\nYour profile will begin at this level. It can operate independently while other levels of the same church are not yet using ChurchCare. This setup does not connect it to a different church.")
+                .setMessage("Church: "+churchName+"\n\nChurch structure (highest to lowest):\n"+structureText+"\nStarting level: "+startingLevel+"\nBranch / unit: "+unitName+"\n\nThis branch can begin independently. Other levels of the same church can join later, and this setup does not connect it to a different church.")
                 .setNegativeButton("Edit",null).setPositiveButton("Confirm",(dialog,which)->{
-                    try { database.saveChurchSetup(churchName,unitName,levelName,templateId,structure.toString(),templateVersion); showHome(); }
+                    try { database.saveChurchSetup(churchName,unitName,startingLevel,templateId,structure.toString(),templateVersion); showHome(); }
                     catch(Exception e) { android.util.Log.e("ChurchCare","Setup failed",e); Toast.makeText(this,"Could not save setup. Please try again.",Toast.LENGTH_LONG).show(); }
                 }).show();
         });
