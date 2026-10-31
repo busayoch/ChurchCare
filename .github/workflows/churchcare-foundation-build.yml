@@ -100,22 +100,30 @@ jobs:
           sha256sum "$DEBUG_APK" "$RELEASE_APK" | tee SHA256SUMS.txt
           echo "Both APK files compiled. Device/emulator launch is not yet verified."
 
-      - name: Upload foundation APK
+      # GitHub Actions artifacts are downloaded as ZIP archives. Upload each APK
+      # as a single-file artifact so the APK sits at the ZIP root with no nested folders.
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: ChurchCare-clean-foundation-debug-apk
-          path: |
-            rebuild/android/app/build/outputs/apk/debug/app-debug.apk
-            SHA256SUMS.txt
+          name: ChurchCare-Debug-APK
+          path: rebuild/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
 
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
         with:
-          name: ChurchCare-signed-release-apk
+          name: ChurchCare-Release-APK
+          path: rebuild/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build verification details
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChurchCare-APK-Verification
           path: |
-            rebuild/android/app/build/outputs/apk/release/app-release.apk
+            SHA256SUMS.txt
             release-certificate.txt
           if-no-files-found: error
           retention-days: 14
