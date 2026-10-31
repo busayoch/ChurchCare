@@ -1,4 +1,7 @@
-plugins { id 'com.android.application' }
+plugins {
+    id 'com.android.application'
+    id 'com.google.gms.google-services'
+}
 
 android {
     namespace 'com.churchcare.app'
@@ -32,6 +35,11 @@ android {
 }
 
 dependencies {
-    // 22.0.0 requires API 24; keep ChurchCare's existing API 23 minimum.
+    // Keep the existing Google Play Services authorization dependency for Drive.
     implementation 'com.google.android.gms:play-services-auth:21.2.0'
+
+    // Firebase Authentication and Cloud Firestore use a shared compatible BoM.
+    implementation platform('com.google.firebase:firebase-bom:35.1.0')
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-firestore'
 }
