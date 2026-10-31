@@ -49,3 +49,12 @@ GitHub Actions workflow: [ChurchCare Clean Foundation Build](../.github/workflow
 Build command in the workflow: `gradle --no-daemon --stacktrace :app:assembleDebug` from `rebuild/android`.
 
 Do not call a build verified until the latest workflow run has succeeded. Runtime behavior must also be tested on a device before release.
+
+
+## Organisational template catalogue
+
+The denomination research catalogue and machine-readable seed are stored in:
+- `CHURCH-ORGANISATION-TEMPLATE-LIBRARY.md`
+- `assets/church-organisation-templates.v1.json`
+
+These are research/configuration inputs, not yet a claim that every template is fully verified or already selectable in the Android UI. The catalogue distinguishes confirmed working configurations from drafts and unverified vocabulary. Leadership titles remain separate from organisational levels. Template adoption creates a church-specific copy; shared updates never overwrite active church configurations. Any user may propose changes, while only authorised reviewers can publish them.
