@@ -20,7 +20,7 @@ import java.util.UUID;
  */
 public final class MemberDatabase extends SQLiteOpenHelper {
     private static final String DB_NAME = "churchcare_local.db";
-    private static final int DB_VERSION = 3;
+    private static final int DB_VERSION = 4;
     private static final Set<String> TABLES = new HashSet<>(Arrays.asList(
         "members", "organizations", "appointments", "delegations", "visits", "care_records"
     ));
@@ -33,6 +33,11 @@ public final class MemberDatabase extends SQLiteOpenHelper {
     @Override public void onCreate(SQLiteDatabase db) {
         createBaseTables(db);
         createDomainTables(db);
+        createChurchProfileTable(db);
+    }
+
+    private void createChurchProfileTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS church_profile (id INTEGER PRIMARY KEY CHECK(id=1), church_id TEXT NOT NULL UNIQUE, church_name TEXT NOT NULL, local_unit_id TEXT NOT NULL, local_unit_name TEXT NOT NULL, local_level_name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)");
     }
 
     private void createBaseTables(SQLiteDatabase db) {
@@ -67,6 +72,57 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             addColumnIfMissing(db, "members", "extra_photo_one_path", "TEXT NOT NULL DEFAULT ''");
             addColumnIfMissing(db, "members", "extra_photo_two_path", "TEXT NOT NULL DEFAULT ''");
         }
+        if (oldVersion < 4) createChurchProfileTable(db);
+    }
+
+    /** A local ChurchCare installation belongs to one church and one starting branch/unit. */
+    public boolean hasChurchSetup() {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM church_profile WHERE id=1", null)) {
+            return c.moveToFirst() && c.getInt(0) == 1;
+        }
+    }
+
+    public String churchName() {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT church_name FROM church_profile WHERE id=1", null)) {
+            return c.moveToFirst() ? c.getString(0) : "";
+        }
+    }
+
+    public String localUnitName() {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT local_unit_name FROM church_profile WHERE id=1", null)) {
+            return c.moveToFirst() ? c.getString(0) : "";
+        }
+    }
+
+    /** Create the church identity and its first branch/unit atomically. */
+    public String saveChurchSetup(String churchName, String unitName, String levelName) {
+        String church = churchName == null ? "" : churchName.trim();
+        String unit = unitName == null ? "" : unitName.trim();
+        String level = levelName == null ? "" : levelName.trim();
+        if (church.isEmpty() || unit.isEmpty() || level.isEmpty()) {
+            throw new IllegalArgumentException("Enter the church name, starting branch/unit name and its level.");
+        }
+        SQLiteDatabase db = getWritableDatabase();
+        String churchId = UUID.randomUUID().toString();
+        String unitId = UUID.randomUUID().toString();
+        long now = System.currentTimeMillis();
+        db.beginTransaction();
+        try {
+            ContentValues branch = new ContentValues();
+            branch.put("id", unitId); branch.put("name", unit); branch.put("type", level);
+            branch.putNull("parent_id"); branch.put("location", ""); branch.put("notes", "");
+            branch.put("created_at", now); branch.put("updated_at", now);
+            branch.put("deleted", 0); branch.put("sync_state", "LOCAL_ONLY");
+            db.insertOrThrow("organizations", null, branch);
+
+            ContentValues profile = new ContentValues();
+            profile.put("id", 1); profile.put("church_id", churchId); profile.put("church_name", church);
+            profile.put("local_unit_id", unitId); profile.put("local_unit_name", unit);
+            profile.put("local_level_name", level); profile.put("created_at", now); profile.put("updated_at", now);
+            db.insertOrThrow("church_profile", null, profile);
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+        return unitId;
     }
 
     private void addColumnIfMissing(SQLiteDatabase db, String table, String column, String type) {
@@ -265,7 +321,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         backup.put("schema_version", DB_VERSION);
         backup.put("exported_at", System.currentTimeMillis());
         JSONArray tables = new JSONArray();
-        for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log"}) {
+        for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log","church_profile"}) {
             JSONObject tableObject = new JSONObject();
             tableObject.put("name", table);
             JSONArray rows = new JSONArray();
@@ -306,7 +362,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         for (int i = 0; i < tableArray.length(); i++) {
             JSONObject tableObject = tableArray.getJSONObject(i);
             String name = tableObject.optString("name", "");
-            if (!Arrays.asList("members","organizations","appointments","delegations","visits","care_records","change_log").contains(name)
+            if (!Arrays.asList("members","organizations","appointments","delegations","visits","care_records","change_log","church_profile").contains(name)
                     || !(tableObject.opt("rows") instanceof JSONArray) || incoming.containsKey(name)) {
                 throw new JSONException("The backup contains an invalid or duplicate table.");
             }
@@ -322,7 +378,9 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             for (String table : new String[]{"change_log","visits","care_records","appointments","delegations","members","organizations"}) {
                 db.delete(table, null, null);
             }
-            for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log"}) {
+            if (incoming.containsKey("church_profile")) db.delete("church_profile", null, null);
+            for (String table : new String[]{"members","organizations","appointments","delegations","visits","care_records","change_log","church_profile"}) {
+                if (!incoming.containsKey(table)) continue;
                 JSONArray rows = incoming.get(table);
                 for (int i = 0; i < rows.length(); i++) {
                     JSONObject row = rows.getJSONObject(i);
