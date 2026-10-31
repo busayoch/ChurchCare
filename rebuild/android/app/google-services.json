@@ -1,0 +1,38 @@
+{
+  "project_info": {
+    "project_number": "896666811630",
+    "project_id": "churchcare-cloud-2026",
+    "storage_bucket": "churchcare-cloud-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:896666811630:android:bc10f44bfb2656c49987ff",
+        "android_client_info": {
+          "package_name": "com.churchcare.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "896666811630-4ki6nujh8tasulqregnu9378e12k042a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.churchcare.app",
+            "certificate_hash": "8b261b66d57e5c959a1f44bf9493e3c5361e6833"
+          }
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCF-NxGqPZTaYGwIH1GqRCtfjJJo0_q9MA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
