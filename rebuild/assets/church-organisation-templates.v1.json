@@ -1,0 +1,175 @@
+{
+  "catalogVersion": 1,
+  "reviewedOn": "2026-10-31",
+  "purpose": "Denomination-specific starting suggestions for organisational units only. Leadership titles and office holders are separate data.",
+  "statuses": [
+    "community_confirmed_working_template",
+    "source_supported_draft",
+    "vocabulary_only_sequence_unverified",
+    "research_pending"
+  ],
+  "templates": [
+    {
+      "id": "rccg-ng-community-working",
+      "name": "Redeemed Christian Church of God (RCCG)",
+      "country": "NG",
+      "status": "community_confirmed_working_template",
+      "version": 1,
+      "relationshipModel": "parent_child",
+      "levelsHighestToLowest": ["National", "Region", "Province", "Zone", "Area", "Parish"],
+      "notes": [
+        "Confirmed by a ChurchCare user for the RCCG context they know.",
+        "Continent is intentionally omitted at the user's direction.",
+        "Not asserted to be the universal RCCG structure. RCCG's published 2026/2027 directory includes continental overseers; individual adopting churches must be able to customise this template."
+      ],
+      "sources": ["https://www.rccg.org/our-structure/"]
+    },
+    {
+      "id": "assemblies-of-god-ng-draft",
+      "name": "Assemblies of God Nigeria",
+      "country": "NG",
+      "status": "source_supported_draft",
+      "version": 1,
+      "relationshipModel": "parent_child",
+      "levelsHighestToLowest": ["General Council", "District", "Section", "Branch"],
+      "notes": [
+        "A Lagos West District source documents 21 Sections and more than 100 Branches.",
+        "Treat as a Nigerian district example, not a universal mandatory structure.",
+        "Local assembly autonomy and different affiliation arrangements must be supported."
+      ],
+      "sources": [
+        "https://www.aognigeria.org/",
+        "https://www.aglagoswest.org/about",
+        "https://www.aglagoswest.org/sections"
+      ]
+    },
+    {
+      "id": "nigerian-baptist-convention-draft",
+      "name": "Nigerian Baptist Convention",
+      "country": "NG",
+      "status": "source_supported_draft",
+      "version": 1,
+      "relationshipModel": "cooperative_affiliation",
+      "levelsHighestToLowest": ["Convention", "Conference", "Association", "Local Baptist Church"],
+      "notes": [
+        "The Convention constitution describes geographical groupings of local churches and recognises local church autonomy.",
+        "Do not enforce this as an unrestricted command hierarchy."
+      ],
+      "sources": [
+        "https://nigerianbaptist.org/our-constitution/",
+        "https://www.nigerianbaptist.org/wp-content/uploads/2022/02/Nigerian-Baptist-Convention-Constitution1.pdf"
+      ]
+    },
+    {
+      "id": "methodist-church-nigeria-draft",
+      "name": "Methodist Church Nigeria",
+      "country": "NG",
+      "status": "source_supported_draft",
+      "version": 1,
+      "relationshipModel": "parent_child",
+      "levelsHighestToLowest": ["Conference", "Archdiocese", "Diocese", "Circuit", "Local Church"],
+      "notes": ["Published profile describes this broad sequence; confirm local and current variations."],
+      "sources": ["https://www.oikoumene.org/member-churches/methodist-church-nigeria"]
+    },
+    {
+      "id": "christ-embassy-ng-review",
+      "name": "Christ Embassy / Believers' LoveWorld",
+      "country": "NG",
+      "status": "vocabulary_only_sequence_unverified",
+      "version": 1,
+      "relationshipModel": "custom_required",
+      "suggestedLevelNames": ["Zone", "Zonal Church", "Central Church", "Ministry Centre", "Local Church", "Group Church"],
+      "levelsHighestToLowest": [],
+      "notes": ["Observed labels only. Do not infer a complete universal parent-child sequence."],
+      "sources": [
+        "https://christembassy.org/sunday-services-2/",
+        "https://christembassy.org/christ-embassy-and-you/"
+      ]
+    },
+    {
+      "id": "mfm-ng-review",
+      "name": "Mountain of Fire and Miracles Ministries (MFM)",
+      "country": "NG",
+      "status": "vocabulary_only_sequence_unverified",
+      "version": 1,
+      "relationshipModel": "network_or_custom_required",
+      "suggestedLevelNames": ["International Headquarters", "Branch"],
+      "levelsHighestToLowest": [],
+      "notes": ["Official sources describe headquarters and a worldwide branch network, not a complete nested hierarchy."],
+      "sources": [
+        "https://www.mountainoffire.org/about",
+        "https://www.mountainoffire.org/about/administration"
+      ]
+    },
+    {
+      "id": "living-faith-ng-review",
+      "name": "Living Faith Church Worldwide (Winners Chapel)",
+      "country": "NG",
+      "status": "vocabulary_only_sequence_unverified",
+      "version": 1,
+      "relationshipModel": "custom_required",
+      "suggestedLevelNames": ["Area", "Zone", "Local Church"],
+      "levelsHighestToLowest": [],
+      "notes": ["Area and Zone are observed terms; sequence and intermediate levels require confirmation."],
+      "sources": [
+        "https://lfcww.org/",
+        "https://bfc.lfcww.org/"
+      ]
+    },
+    {
+      "id": "cac-ng-review",
+      "name": "Christ Apostolic Church (CAC)",
+      "country": "NG",
+      "status": "vocabulary_only_sequence_unverified",
+      "version": 1,
+      "relationshipModel": "mixed_or_custom_required",
+      "suggestedLevelNames": ["General Council", "General Executive Council", "Region", "District Coordination Council (DCC)", "Zone", "District", "Assembly"],
+      "levelsHighestToLowest": [],
+      "notes": [
+        "Observed labels only; some sources show parallel or regional coordination structures.",
+        "A 2023 report announced a constitutional review committee. Verify the current constitution and intended CAC context before defining a fixed sequence."
+      ],
+      "sources": [
+        "https://cacakinyeleregion.org/our-dccs-zones/",
+        "https://www.cacworldnews.com/2023/09/christ-apostolic-church-inaugurates.html",
+        "https://kubanni-backend.abu.edu.ng/server/api/core/bitstreams/f2851cce-4ba7-4a2e-a904-00b28a81ae8d/content"
+      ]
+    },
+    {
+      "id": "church-of-nigeria-anglican-draft",
+      "name": "Church of Nigeria (Anglican Communion)",
+      "country": "NG",
+      "status": "source_supported_draft",
+      "version": 1,
+      "relationshipModel": "parent_child",
+      "levelsHighestToLowest": ["Province", "Diocese", "Archdeaconry", "Parish", "Congregation"],
+      "notes": ["Deanery may be an optional local level. Verify diocesan variations before activation."],
+      "sources": [
+        "https://anglican-nig.org/50-things-to-know-about-the-church-of-nigeria-anglican-communion/",
+        "https://anglican-nig.org/our-provinces/ecclesiastical-province-of-lagos/"
+      ]
+    },
+    {
+      "id": "catholic-ng-research",
+      "name": "Catholic Church in Nigeria",
+      "country": "NG",
+      "status": "research_pending",
+      "version": 1,
+      "relationshipModel": "custom_required",
+      "suggestedLevelNames": ["National Episcopal Conference", "Ecclesiastical Province", "Archdiocese", "Diocese", "Deanery", "Parish"],
+      "levelsHighestToLowest": [],
+      "notes": ["Suggested terminology only; Nigeria-specific structure and optional levels require authoritative verification before becoming a template."],
+      "sources": []
+    }
+  ],
+  "globalRules": {
+    "unitsAreNotLeadershipTitles": true,
+    "templatesArePrivateCopiesOnAdoption": true,
+    "templateUpdatesNeverOverwriteActiveChurchConfiguration": true,
+    "allUsersMayProposeChanges": true,
+    "onlyAuthorisedReviewersMayPublishChanges": true,
+    "supportParentChildAndCooperativeNetworkRelationships": true,
+    "allowStandaloneChurches": true,
+    "preserveUnitIdentityAndRecordsOnReconfiguration": true
+  }
+}
