@@ -20,7 +20,7 @@ import java.util.UUID;
  */
 public final class MemberDatabase extends SQLiteOpenHelper {
     private static final String DB_NAME = "churchcare_local.db";
-    private static final int DB_VERSION = 4;
+    private static final int DB_VERSION = 5;
     private static final Set<String> TABLES = new HashSet<>(Arrays.asList(
         "members", "organizations", "appointments", "delegations", "visits", "care_records"
     ));
@@ -34,10 +34,20 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         createBaseTables(db);
         createDomainTables(db);
         createChurchProfileTable(db);
+        addColumnIfMissing(db, "church_profile", "template_id", "TEXT NOT NULL DEFAULT 'custom'");
+        addColumnIfMissing(db, "church_profile", "structure_json", "TEXT NOT NULL DEFAULT '[]'");
+        addColumnIfMissing(db, "church_profile", "configuration_version", "INTEGER NOT NULL DEFAULT 1");
+        addColumnIfMissing(db, "church_profile", "template_version", "INTEGER NOT NULL DEFAULT 0");
+        createConfigurationSuggestionsTable(db);
     }
 
     private void createChurchProfileTable(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE IF NOT EXISTS church_profile (id INTEGER PRIMARY KEY CHECK(id=1), church_id TEXT NOT NULL UNIQUE, church_name TEXT NOT NULL, local_unit_id TEXT NOT NULL, local_unit_name TEXT NOT NULL, local_level_name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)");
+    }
+
+    private void createConfigurationSuggestionsTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS configuration_suggestions (id TEXT PRIMARY KEY NOT NULL, area TEXT NOT NULL, title TEXT NOT NULL, details TEXT NOT NULL DEFAULT '', proposed_by TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'PENDING', reviewer TEXT NOT NULL DEFAULT '', decision_notes TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_config_suggestions_status ON configuration_suggestions(status, created_at)");
     }
 
     private void createBaseTables(SQLiteDatabase db) {
@@ -73,6 +83,13 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             addColumnIfMissing(db, "members", "extra_photo_two_path", "TEXT NOT NULL DEFAULT ''");
         }
         if (oldVersion < 4) createChurchProfileTable(db);
+        if (oldVersion < 5) {
+            addColumnIfMissing(db, "church_profile", "template_id", "TEXT NOT NULL DEFAULT 'custom'");
+            addColumnIfMissing(db, "church_profile", "structure_json", "TEXT NOT NULL DEFAULT '[]'");
+            addColumnIfMissing(db, "church_profile", "configuration_version", "INTEGER NOT NULL DEFAULT 1");
+            addColumnIfMissing(db, "church_profile", "template_version", "INTEGER NOT NULL DEFAULT 0");
+            createConfigurationSuggestionsTable(db);
+        }
     }
 
     /** A local ChurchCare installation belongs to one church and one starting branch/unit. */
@@ -94,8 +111,8 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         }
     }
 
-    /** Create the church identity and its first branch/unit atomically. */
-    public String saveChurchSetup(String churchName, String unitName, String levelName) {
+    /** Create the church identity, adopted template copy and first unit atomically. */
+    public String saveChurchSetup(String churchName, String unitName, String levelName, String templateId, String structureJson, int templateVersion) {
         String church = churchName == null ? "" : churchName.trim();
         String unit = unitName == null ? "" : unitName.trim();
         String level = levelName == null ? "" : levelName.trim();
@@ -118,7 +135,10 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             ContentValues profile = new ContentValues();
             profile.put("id", 1); profile.put("church_id", churchId); profile.put("church_name", church);
             profile.put("local_unit_id", unitId); profile.put("local_unit_name", unit);
-            profile.put("local_level_name", level); profile.put("created_at", now); profile.put("updated_at", now);
+            profile.put("local_level_name", level); profile.put("template_id", templateId == null ? "custom" : templateId);
+            profile.put("structure_json", structureJson == null ? "[]" : structureJson);
+            profile.put("configuration_version", 1); profile.put("template_version", templateVersion);
+            profile.put("created_at", now); profile.put("updated_at", now);
             db.insertOrThrow("church_profile", null, profile);
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
