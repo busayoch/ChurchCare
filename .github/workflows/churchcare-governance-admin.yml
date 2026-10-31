@@ -1,0 +1,75 @@
+name: ChurchCare Governance Administration
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Administrative operation
+        required: true
+        type: choice
+        options:
+          - bootstrap-owner
+          - grant-reviewer
+          - revoke-reviewer
+      target_uid:
+        description: Firebase Authentication UID of the target account
+        required: true
+        type: string
+      requester_uid:
+        description: Firebase UID of the current Owner (required for reviewer changes)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: churchcare-governance-admin
+  cancel-in-progress: false
+
+jobs:
+  administer:
+    name: Run trusted Firebase role operation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Restrict execution to repository owner
+        env:
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          if [ "$ACTOR" != "busayoch" ]; then
+            echo "::error::Only the ChurchCare repository owner may run this administrative workflow."
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tools/churchcare-admin/requirements.txt
+
+      - name: Install Firebase Admin SDK
+        run: python -m pip install --disable-pip-version-check -r tools/churchcare-admin/requirements.txt
+
+      - name: Execute requested operation
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          OPERATION: ${{ inputs.operation }}
+          TARGET_UID: ${{ inputs.target_uid }}
+          REQUESTER_UID: ${{ inputs.requester_uid }}
+        run: |
+          set -euo pipefail
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::Configure the FIREBASE_SERVICE_ACCOUNT_JSON repository secret first."
+            exit 1
+          fi
+          args=(--operation "$OPERATION" --target-uid "$TARGET_UID")
+          if [ -n "$REQUESTER_UID" ]; then
+            args+=(--requester-uid "$REQUESTER_UID")
+          fi
+          python tools/churchcare-admin/manage_roles.py "${args[@]}"
