@@ -14,7 +14,7 @@
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Home"/></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Church structure" Tag="Structure">
-                    <NavigationViewItem.Icon><SymbolIcon Symbol="Org"/></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="List"/></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Members" Tag="Members">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="People"/></NavigationViewItem.Icon>
@@ -23,7 +23,7 @@
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Calendar"/></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Care records" Tag="Care">
-                    <NavigationViewItem.Icon><SymbolIcon Symbol="Heart"/></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="ContactInfo"/></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Delegations" Tag="Delegations">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Permissions"/></NavigationViewItem.Icon>
