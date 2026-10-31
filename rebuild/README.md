@@ -27,6 +27,10 @@ The Android app uses a local SQLite database as its operational source of truth.
 - The ChurchCare Community Emblem is configured as the launcher icon. A polished adaptive icon with separately generated foreground/background assets can be refined later.
 - Photo references are stored as local document URIs. ZIP export copies accessible referenced images into the local archive. A future cloud-sync implementation must upload only the profile thumbnail by default and must never automatically upload the two additional photos. The explicit full-backup feature is different: it bundles accessible photos and all local tables.
 
+## Next milestone: decentralised identity and organisation access
+
+The approved architectural direction is documented in [Account and Organisation Architecture](ACCOUNT-AND-ORGANIZATION-ARCHITECTURE.md). ChurchCare must support independent adoption by any local organisation, optional consent-based connections to higher/lower organisations, organisation-scoped roles and permissions, and safe disconnection. Authentication and cross-organisation authorization are not yet implemented; do not treat local role labels as a security boundary.
+
 ## Data safety and migrations
 
 Schema upgrades are additive. Existing member records are retained when the schema version advances; records are archived using a deleted/tombstone state rather than immediately removed. Visit retention is enforced when a new visit is saved.
