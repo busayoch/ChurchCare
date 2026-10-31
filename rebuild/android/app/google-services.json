@@ -20,6 +20,10 @@
             "package_name": "com.churchcare.app",
             "certificate_hash": "8b261b66d57e5c959a1f44bf9493e3c5361e6833"
           }
+        },
+        {
+          "client_id": "896666811630-4nruan99j8mvtt7tvqft4iqlkmu9c09c.apps.googleusercontent.com",
+          "client_type": 3
         }
       ],
       "api_key": [
@@ -29,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "896666811630-4nruan99j8mvtt7tvqft4iqlkmu9c09c.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
