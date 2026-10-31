@@ -155,7 +155,7 @@ public sealed partial class MainWindow : Window
         void RefreshStartingLevelChoices()
         {
             startingLevels.Children.Clear();
-            var availableNames = levels.Text.Split(new[] { '\\r', '\\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            var availableNames = levels.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             foreach (var levelName in availableNames)
             {
@@ -181,7 +181,7 @@ public sealed partial class MainWindow : Window
         content.Children.Add(unit);
         var dialog = new ContentDialog { XamlRoot = Content.XamlRoot, Title = "Welcome to ChurchCare", Content = content, PrimaryButtonText = "Create profile", CloseButtonText = "Not now", DefaultButton = ContentDialogButton.Primary };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-        var names = levels.Text.Split(new[] { '\\r', '\\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var names = levels.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var selectedStartingLevel = startingLevels.Children.OfType<RadioButton>()
             .FirstOrDefault(option => option.IsChecked == true)?.Tag as string;
         if (string.IsNullOrWhiteSpace(church.Text) || string.IsNullOrWhiteSpace(unit.Text) || names.Count == 0 || string.IsNullOrWhiteSpace(selectedStartingLevel) || !names.Contains(selectedStartingLevel, StringComparer.OrdinalIgnoreCase))
