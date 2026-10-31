@@ -22,7 +22,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
     private static final String DB_NAME = "churchcare_local.db";
     private static final int DB_VERSION = 6;
     private static final Set<String> TABLES = new HashSet<>(Arrays.asList(
-        "members", "organizations", "appointments", "delegations", "visits", "care_records"
+        "members", "organizations", "appointments", "delegations", "appointment_reporting", "governance_audit", "visits", "care_records"
     ));
 
     public MemberDatabase(Context context) {
@@ -335,10 +335,10 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         return path.toString();
     }
 
-    public void closeCurrentAppointments(String personName, String newStartDate) {
+    public void closeCurrentAppointments(String personName, String role, String organizationId, String newStartDate) {
         SQLiteDatabase db = getWritableDatabase();
         java.util.ArrayList<String> ids = new java.util.ArrayList<>();
-        try (Cursor c = db.query("appointments", new String[]{"id"}, "deleted=0 AND person_name=? COLLATE NOCASE AND status='Current'", new String[]{personName.trim()}, null, null, null)) {
+        try (Cursor c = db.query("appointments", new String[]{"id"}, "deleted=0 AND person_name=? COLLATE NOCASE AND role=? COLLATE NOCASE AND organization_id IS ? AND status='Current'", new String[]{personName.trim(), role == null ? "" : role.trim(), organizationId}, null, null, null)) {
             while (c.moveToNext()) ids.add(c.getString(0));
         }
         for (String id : ids) {
