@@ -285,7 +285,7 @@ public final class MainActivity extends Activity {
         };
 
         addLevel.setOnClickListener(v->addCustomLevel.add(""));
-        addCustomLevel.accept("");
+        addCustomLevel.add("");
 
         templates.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> p,View v,int position,long id) {
@@ -294,7 +294,7 @@ public final class MainActivity extends Activity {
                 customMode[0]=addingChurch;
                 levelRows.removeAllViews(); customLevelFields.clear();
                 if(addingChurch) {
-                    addCustomLevel.accept("");
+                    addCustomLevel.add("");
                     addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
                     structureHelp.setText("For a church you add yourself, enter every level from highest to lowest. Use the arrows to change the order and × to remove a level.");
                     levelPickerLabel.setText("Starting level for this registration");
@@ -303,13 +303,13 @@ public final class MainActivity extends Activity {
                     String[] known=setupTemplateLevels[position];
                     String[] choices=setupTemplateLevelChoices[position];
                     if(known.length>0) {
-                        for(String name:known) addCustomLevel.accept(name);
+                        for(String name:known) addCustomLevel.add(name);
                         addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
                         structureHelp.setText("This is a suggested starting structure for the selected church. You can rename, add, remove or reorder levels for its local configuration.");
                         levelPickerLabel.setText("Starting level for this registration");
                         levelPicker.setVisibility(View.VISIBLE); customLevel.setVisibility(View.GONE);
                     } else {
-                        addCustomLevel.accept("");
+                        addCustomLevel.add("");
                         addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
                         structureHelp.setText("The catalogue does not confirm a complete order for this church. Define the actual order used by your congregation; suggested names are available in the catalogue notes.");
                         levelPickerLabel.setText("Starting level for this registration");
