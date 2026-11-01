@@ -766,6 +766,71 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(5); menu.addView(b,p);
     }
 
+    /**
+     * A clearer member-registration journey. The existing MEMBER fields and
+     * relationship-ID validation are retained; this only changes presentation.
+     */
+    private void showMemberRegistration() {
+        base("Add a member", "Start with the person's name. The other details can be added now or updated later.");
+        ScrollView scroll=new ScrollView(this);
+        LinearLayout form=new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(16),dp(8),dp(16),dp(16)); scroll.addView(form);
+        TextView identityTitle=new TextView(this); identityTitle.setText("1. Person's details");
+        identityTitle.setTextSize(17); identityTitle.setTypeface(null,1); identityTitle.setTextColor(ink);
+        form.addView(identityTitle);
+        TextView identityHelp=new TextView(this); identityHelp.setText("Enter the name the church knows this person by. A phone number is helpful but not required.");
+        identityHelp.setTextColor(muted); identityHelp.setPadding(0,dp(4),0,dp(8)); form.addView(identityHelp);
+        EditText name=new EditText(this); name.setSingleLine(true); name.setHint("Full name *");
+        name.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS); form.addView(name);
+        EditText phone=new EditText(this); phone.setSingleLine(true); phone.setHint("Phone number (optional)");
+        phone.setInputType(PHONE); form.addView(phone);
+        TextView connectionTitle=new TextView(this); connectionTitle.setText("2. Church connection");
+        connectionTitle.setTextSize(17); connectionTitle.setTypeface(null,1); connectionTitle.setTextColor(ink);
+        connectionTitle.setPadding(0,dp(14),0,0); form.addView(connectionTitle);
+        TextView connectionHelp=new TextView(this); connectionHelp.setText("Choose the branch or group this person belongs to. You can leave it blank and add it later.");
+        connectionHelp.setTextColor(muted); connectionHelp.setPadding(0,dp(4),0,dp(8)); form.addView(connectionHelp);
+        EditText organization=new EditText(this); organization.setSingleLine(true); organization.setHint("Choose a church branch or group");
+        configureRelationshipPicker("members","organization",organization); form.addView(organization);
+        EditText address=new EditText(this); address.setHint("Address or area (optional)");
+        address.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS); form.addView(address);
+        final String[] status={"Active"};
+        Button statusButton=new Button(this); statusButton.setAllCaps(false); statusButton.setText("Member status: Active");
+        statusButton.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Member status")
+            .setItems(new String[]{"Active","Inactive"},(d,w)->{status[0]=w==0?"Active":"Inactive";statusButton.setText("Member status: "+status[0]);}).show());
+        form.addView(statusButton);
+        TextView privacy=new TextView(this); privacy.setText("Only add information needed by your church. You can update this member's details later.");
+        privacy.setTextColor(muted); privacy.setTextSize(12); privacy.setPadding(0,dp(12),0,dp(4)); form.addView(privacy);
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        Button save=new Button(this); save.setText("Save member"); save.setAllCaps(false);
+        save.setOnClickListener(v->{
+            String fullName=name.getText().toString().trim();
+            if(fullName.isEmpty()){name.setError("Please enter the member's name");name.requestFocus();return;}
+            ContentValues values=new ContentValues();
+            values.put("full_name",fullName);
+            values.put("phone",phone.getText().toString().trim());
+            values.put("organization",organization.getText().toString().trim());
+            values.put("address",address.getText().toString().trim());
+            values.put("status",status[0]);
+            String selectedId=organization.getTag()==null?null:String.valueOf(organization.getTag());
+            if(!values.getAsString("organization").isEmpty() && selectedId==null) {
+                organization.setError("Choose a branch from the list");return;
+            }
+            if(selectedId==null||selectedId.isEmpty()) values.putNull("organization_id");
+            else values.put("organization_id",selectedId);
+            try {
+                database.insertRecord("members",values);
+                Toast.makeText(this,"Member added on this device",Toast.LENGTH_LONG).show();
+                showRecords("members");
+            } catch(Exception error) {
+                android.util.Log.e("ChurchCare","Member registration failed",error);
+                new AlertDialog.Builder(this).setTitle("Member not saved")
+                    .setMessage("ChurchCare could not save this member. Your existing records have not been changed. Please try again.")
+                    .setPositiveButton("OK",null).show();
+            }
+        });
+        root.addView(save);
+    }
+
     private void showRecords(String table) {
         String title=titleFor(table);
         String description=table.equals("members")?"Find someone or add a new member.":table.equals("organizations")?"View the church locations and groups you have added.":"Choose a record to view or update it.";
@@ -776,7 +841,7 @@ public final class MainActivity extends Activity {
             root.addView(search);
         } else search=null;
         Button add=new Button(this); add.setText(table.equals("members")?"＋ Add a member":"＋ Add "+singular(table)); add.setAllCaps(false);
-        add.setOnClickListener(v->showForm(table,null,null)); root.addView(add);
+        add.setOnClickListener(v->{if(table.equals("members"))showMemberRegistration();else showForm(table,null,null);}); root.addView(add);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         if(search!=null){
