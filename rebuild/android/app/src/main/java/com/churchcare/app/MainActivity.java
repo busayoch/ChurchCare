@@ -512,7 +512,9 @@ public final class MainActivity extends Activity {
                             .setNegativeButton("Cancel",null).setPositiveButton("Propose",(dd,ww)->{
                                 FirebaseUser actor=FirebaseAuth.getInstance().getCurrentUser();
                                 try {
-                                    database.proposePersonRelationship(personId,targetId,null,null,type,detail.getText().toString(),null,actor==null?null:actor.getUid());
+                                    String sourceId="OVERSEER".equals(type)?targetId:personId;
+                                    String destinationId="OVERSEER".equals(type)?personId:targetId;
+                                    database.proposePersonRelationship(sourceId,destinationId,null,null,type,detail.getText().toString(),null,actor==null?null:actor.getUid());
                                     Toast.makeText(this,"Connection proposal saved locally; recipient acceptance is not yet available.",Toast.LENGTH_LONG).show();
                                     showPersonRelationships(personId,personName);
                                 } catch(Exception error) {
