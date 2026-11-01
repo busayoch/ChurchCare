@@ -38,7 +38,7 @@ A higher-level Follow-up leader can inspect individual follow-up records through
 
 Access is determined by active authenticated identity, active appointment, organisational ancestry and any explicit delegation scope. A person does not gain authority over unrelated branches merely by holding a similarly named position.
 
-The local schema introduced in database version 6 is a foundation for this model. It does not itself grant cloud access. Firestore remains deny-all until server-enforced rules and trusted authorization logic are implemented and tested. Client-side checks alone are not a security boundary.
+The local schema introduced in database version 6 is a foundation for this model. Local management now supports automatic upward Follow-up links, explicit additional reporting links, and a dedicated pastoral delegation workspace. Reporting links are checked for circular chains before a new explicit edge is saved. Changes to organisation parentage trigger a recalculation of automatic Follow-up reporting. These are local governance records and do not themselves grant cloud access. Firestore remains deny-all until server-enforced rules and trusted authorization logic are implemented and tested. Client-side checks alone are not a security boundary.
 
 ## Accountability and audit
 
