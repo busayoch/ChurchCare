@@ -415,7 +415,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
     public int refreshAllAutomaticFollowUpReporting() {
         java.util.ArrayList<String> ids = new java.util.ArrayList<>();
         try (Cursor c = getReadableDatabase().query("appointments", new String[]{"id"},
-                "deleted=0 AND status='Current' AND position_code='HEAD_OF_FOLLOW_UP' COLLATE NOCASE",
+                "deleted=0 AND position_code='HEAD_OF_FOLLOW_UP' COLLATE NOCASE",
                 null, null, null, null)) {
             while (c.moveToNext()) ids.add(c.getString(0));
         }
