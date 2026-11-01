@@ -512,7 +512,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             if(actorUid!=null&&!actorUid.trim().isEmpty()) {
                 ContentValues audit=new ContentValues(); audit.put("id",UUID.randomUUID().toString());
                 audit.put("actor_uid",actorUid); audit.put("action","MEMBER_CONNECTION_CREATED");
-                audit.put("entity_type","member_connection"); audit.put("entity_id",link.getAsString("id"));
+                audit.put("entity_type","member_connection"); audit.put("entity_id",linkId);
                 try(Cursor c=db.query("appointments",new String[]{"organization_id"},"id=?",new String[]{appointmentId},null,null,null,"1")) {
                     if(c.moveToFirst()&&!c.isNull(0)) audit.put("organization_id",c.getString(0));
                 }
