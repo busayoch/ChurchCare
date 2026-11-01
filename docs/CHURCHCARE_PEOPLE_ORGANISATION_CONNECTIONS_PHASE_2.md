@@ -205,6 +205,10 @@ The design is not complete until the implementation can support all of these:
 **ChurchCare is a multi-dimensional organisational relationship system.** People connect upwards, downwards and laterally according to real authority, responsibility and relevant working relationships. Those connections may cross organisational levels and departments. Membership, appointment, identity, relationship and permission remain distinct concepts.
 
 
+## Pastoral delegation appointment visibility
+
+The leadership workspace now resolves each delegation's overseer and delegate Firebase UIDs against current appointments for display. A unique match is shown with its role and organisational unit; no match is identified explicitly; multiple current appointments matching the same UID are labelled ambiguous. This is a read-only association and does not create an appointment reporting edge, select one appointment arbitrarily, or grant record access. Delegation remains distinct from reporting hierarchy and access permission.
+
 ## Fresh-install and backup validation plan
 
 The initial ChurchCare deployment is a fresh install with no pre-existing church records. Validation must therefore start with an empty version-8 database and confirm that all schema tables and indexes are created without phantom people, memberships, appointments or relationships. Backup/restore round-trip tests should use clearly synthetic fixture records created for testing, restore into a clean database, and compare the restored records and relationships. Older backup compatibility should be exercised with synthetic legacy-format fixtures only; no user or church records are assumed to exist. Backup export now runs inside a SQLite read transaction so the exported tables represent one consistent snapshot, and restore rejects backups declaring a schema version newer than the installed app.
