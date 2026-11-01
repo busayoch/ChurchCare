@@ -662,7 +662,7 @@ public final class MainActivity extends Activity {
     private void showPastoralDelegates() {
         base("Pastoral delegates","Record who has been entrusted with oversight, and the scope and duration of that delegation");
         TextView note=new TextView(this);
-        note.setText("Delegations are recorded locally. Firebase UIDs identify the overseer and delegate where available. A delegation record does not yet grant access to member or care records, and no cloud permissions are enabled.");
+        note.setText("Record who is responsible, who is being entrusted, what they may handle and how long the arrangement lasts. This record does not automatically give anyone access to private member or care information.");
         note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(12),dp(10),dp(12),dp(10)); note.setBackgroundColor(0xFFFFFFFF); root.addView(note);
         Button add=new Button(this); add.setText("+ Record pastoral delegation"); add.setAllCaps(false);
         add.setOnClickListener(v->showForm("delegations",null,null)); root.addView(add);
@@ -689,10 +689,10 @@ public final class MainActivity extends Activity {
                         }
                     }
                     if(snapshot.size()>0) new AlertDialog.Builder(this).setTitle("Pastoral delegation")
-                        .setMessage(overseer+" → "+delegate+"\n\nScope: "+scope+"\nOrganisation: "+org+"\nStatus: "+status+
-                            "\n\nOverseer UID: "+safe(snapshot,"overseer_uid")+"\nDelegate UID: "+safe(snapshot,"delegate_uid")+
-                            "\nPermissions: "+safe(snapshot,"permissions_json")+
-                            "\n\nAppointment matching is informational only. Multiple matches are not auto-selected and this does not grant access.")
+                        .setMessage(overseer+" → "+delegate+"\n\nResponsibility: "+scope+"\nChurch branch / unit: "+org+"\nStatus: "+status+
+                            "\n\n"+delegationAppointmentStatusForMessage(snapshot,"overseer")+
+                            "\n"+delegationAppointmentStatusForMessage(snapshot,"delegate")+
+                            "\n\nThese appointment details help identify the people involved. They do not by themselves grant access to private records.")
                         .setPositiveButton("Edit",(d,w)->showForm("delegations",id,snapshot))
                         .setNegativeButton("Close",null).show();
                 });
@@ -708,10 +708,21 @@ public final class MainActivity extends Activity {
         String label="";
         try { count=row.getInt(row.getColumnIndexOrThrow(endpoint+"_appointment_count")); } catch(Exception ignored) {}
         try { label=get(row,endpoint+"_appointment_label"); } catch(Exception ignored) {}
-        if(uid.isEmpty()) return "no Firebase UID linked";
-        if(count==0) return "no current appointment matched to UID";
-        if(count>1) return "ambiguous — "+count+" current appointments match this UID";
-        return label.isEmpty()?"one current appointment matched":label;
+        if(uid.isEmpty()) return "ChurchCare account not linked";
+        if(count==0) return "No current leadership appointment found";
+        if(count>1) return "More than one current appointment found — please review";
+        return label.isEmpty()?"One current appointment found":label;
+    }
+
+    private String delegationAppointmentStatusForMessage(ContentValues values,String endpoint) {
+        String uid=safe(values,endpoint+"_uid");
+        if(uid.isEmpty()) return endpoint.equals("overseer")?"Responsible overseer's ChurchCare account is not linked.":"Delegate's ChurchCare account is not linked.";
+        return endpoint.equals("overseer")?"Responsible overseer is linked to a ChurchCare account.":"Delegate is linked to a ChurchCare account.";
+    }
+
+    private boolean isInternalGovernanceField(String key) {
+        return "person_uid".equals(key) || "overseer_uid".equals(key) || "delegate_uid".equals(key)
+            || "permissions_json".equals(key) || "position_code".equals(key);
     }
 
     private void showReportingManagement(String appointmentId,String personName,String role) {
@@ -864,6 +875,7 @@ public final class MainActivity extends Activity {
         EditText[] inputs=new EditText[fields.length];
         for(int i=0;i<fields.length;i++){
             Field f=fields[i]; EditText e=new EditText(this); e.setHint(f.label+(f.required?" *":"")); e.setInputType(f.type); e.setSingleLine(false); e.setMinLines(1);
+            if (isInternalGovernanceField(f.key)) e.setVisibility(View.GONE);
             if(f.key.equals("visit_date")||f.key.equals("opened_date")) e.setText(today());
             if(f.key.equals("status")) e.setText(table.equals("appointments")?"Current":table.equals("members")?"Active":table.equals("care_records")?"Open":"Active");
             if(f.key.equals("priority")) e.setText("Normal");
@@ -882,11 +894,11 @@ public final class MainActivity extends Activity {
         }
         if (table.equals("delegations")) {
             Button useAsDelegate = new Button(this);
-            useAsDelegate.setText("Use my signed-in account as delegate");
+            useAsDelegate.setText("Link my account as the delegate");
             useAsDelegate.setAllCaps(false);
             useAsDelegate.setOnClickListener(v -> {
                 FirebaseUser current=FirebaseAuth.getInstance().getCurrentUser();
-                if(current==null){Toast.makeText(this,"Sign in with Google first from Settings / Account.",Toast.LENGTH_LONG).show();return;}
+                if(current==null){Toast.makeText(this,"Please sign in from Settings / Account first.",Toast.LENGTH_LONG).show();return;}
                 for(int i=0;i<fields.length;i++){
                     if("delegate_uid".equals(fields[i].key)) inputs[i].setText(current.getUid());
                     if("delegate_name".equals(fields[i].key) && inputs[i].getText().toString().trim().isEmpty() && current.getDisplayName()!=null) inputs[i].setText(current.getDisplayName());
@@ -894,17 +906,17 @@ public final class MainActivity extends Activity {
             });
             form.addView(useAsDelegate);
             TextView delegationIdentityNote=new TextView(this);
-            delegationIdentityNote.setText("The signed-in user is recorded as the grantor automatically. Link the overseer and delegate UIDs where available; identity linking does not activate permissions.");
+            delegationIdentityNote.setText("Choose the person responsible and the person being entrusted. You can link this record to your own ChurchCare account using the button above. Recording a delegation does not automatically open private member or care records.");
             delegationIdentityNote.setTextColor(muted); delegationIdentityNote.setTextSize(12); form.addView(delegationIdentityNote);
         }
         if (table.equals("appointments")) {
             Button useAccount = new Button(this);
-            useAccount.setText("Use my signed-in Firebase account");
+            useAccount.setText("This appointment is mine");
             useAccount.setAllCaps(false);
             useAccount.setOnClickListener(v -> {
                 FirebaseUser current = FirebaseAuth.getInstance().getCurrentUser();
                 if (current == null) {
-                    Toast.makeText(this, "Sign in with Google first from Settings / Account.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "Please sign in from Settings / Account first.", Toast.LENGTH_LONG).show();
                     return;
                 }
                 for (int i=0;i<fields.length;i++) {
@@ -915,7 +927,7 @@ public final class MainActivity extends Activity {
             });
             form.addView(useAccount);
             TextView identityNote = new TextView(this);
-            identityNote.setText("A Firebase UID identifies the appointed person. It does not by itself grant cloud access or permissions.");
+            identityNote.setText("Use this only when the appointment belongs to your own ChurchCare account. Otherwise, enter the person's name and role; account linking can be completed separately.");
             identityNote.setTextColor(muted); identityNote.setTextSize(12);
             form.addView(identityNote);
         }
@@ -1120,8 +1132,8 @@ public final class MainActivity extends Activity {
     private String recordDetail(String table,Cursor c) {
         if(table.equals("members"))return join(get(c,"phone"),get(c,"organization"),get(c,"status"),get(c,"address"));
         if(table.equals("organizations"))return join(get(c,"parent_id").isEmpty()?"No parent branch/unit linked yet":"Parent: "+database.findNameById("organizations",get(c,"parent_id")),get(c,"location"),get(c,"notes"));
-        if(table.equals("appointments"))return join("Position code: "+get(c,"position_code"),get(c,"person_uid").isEmpty()?"Not linked to a Firebase identity":"Firebase identity linked",get(c,"start_date")+" → "+(get(c,"end_date").isEmpty()?"Current":get(c,"end_date")),get(c,"status"),get(c,"notes"));
-        if(table.equals("delegations"))return join("Scope: "+get(c,"scope"),"Organization ID: "+get(c,"organization_id"),get(c,"status"),get(c,"start_date")+" → "+get(c,"end_date"));
+        if(table.equals("appointments"))return join(get(c,"start_date")+" → "+(get(c,"end_date").isEmpty()?"Current":get(c,"end_date")),get(c,"status"),get(c,"notes"));
+        if(table.equals("delegations"))return join("Responsibility: "+get(c,"scope"),get(c,"status"),get(c,"start_date")+" → "+get(c,"end_date"));
         if(table.equals("visits"))return join("Visitor: "+get(c,"visitor"),"Outcome: "+get(c,"outcome"),"Follow-up: "+get(c,"next_follow_up"),get(c,"notes"));
         return join("Priority: "+get(c,"priority"),"Status: "+get(c,"status"),"Assigned: "+get(c,"assigned_to"),"Due: "+get(c,"due_date"),get(c,"details"),get(c,"resolution"));
     }
@@ -1131,8 +1143,8 @@ public final class MainActivity extends Activity {
             safe(v,"extra_photo_one_path").isEmpty()?"":"Local photo 1 saved",
             safe(v,"extra_photo_two_path").isEmpty()?"":"Local photo 2 saved");
         if(table.equals("organizations"))return join(safe(v,"parent_id").isEmpty()?"No parent branch/unit linked yet":"Parent: "+database.findNameById("organizations",safe(v,"parent_id")),safe(v,"location"),safe(v,"notes"));
-        if(table.equals("appointments"))return join("Position code: "+safe(v,"position_code"),safe(v,"person_uid").isEmpty()?"Not linked to a Firebase identity":"Firebase identity linked",safe(v,"start_date")+" → "+(safe(v,"end_date").isEmpty()?"Current":safe(v,"end_date")),safe(v,"status"),safe(v,"notes"));
-        if(table.equals("delegations"))return join("Scope: "+safe(v,"scope"),"Organization ID: "+safe(v,"organization_id"),safe(v,"status"),safe(v,"start_date")+" → "+safe(v,"end_date"));
+        if(table.equals("appointments"))return join(safe(v,"start_date")+" → "+(safe(v,"end_date").isEmpty()?"Current":safe(v,"end_date")),safe(v,"status"),safe(v,"notes"));
+        if(table.equals("delegations"))return join("Responsibility: "+safe(v,"scope"),safe(v,"status"),safe(v,"start_date")+" → "+safe(v,"end_date"));
         if(table.equals("visits"))return join("Visitor: "+safe(v,"visitor"),"Outcome: "+safe(v,"outcome"),"Follow-up: "+safe(v,"next_follow_up"),safe(v,"notes"));
         return join("Priority: "+safe(v,"priority"),"Status: "+safe(v,"status"),"Assigned: "+safe(v,"assigned_to"),"Due: "+safe(v,"due_date"),safe(v,"details"),safe(v,"resolution"));
     }
