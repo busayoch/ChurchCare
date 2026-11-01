@@ -21,6 +21,14 @@ The Head of Follow-up may appoint and manage subordinate department or team head
 
 A Head of Follow-up may also have additional reporting relationships to the Overseeing Pastor and/or a pastoral delegate. Reporting is therefore many-to-many, not a single-parent manager field.
 
+## People and connections
+
+The Android app now includes a plain-language **People & connections** workspace. A church worker can select a person from the local member directory, choose a current leadership appointment, and describe the relationship using familiar labels such as My Pastor, My Follow-up Leader, My Team Leader or My Pastoral Delegate. A person may have multiple connections. People can be added and connected without having a ChurchCare account; account linking remains optional.
+
+These links are stored separately from leadership reporting relationships in the local `member_connections` table. Retiring a connection does not delete the member or the leader's appointment. The new table is included in logical backup and restore, and database version 7 creates it through an additive migration.
+
+**Important current limitation:** this first People & connections interface provides local relationship recording, not role-based administration. The current Android app does not yet enforce that a Follow-up Head can manage only their own branch or that an administrator alone can change the whole structure. Do not treat these local links as permissions or use this interface as an access-control boundary. The next security milestone must establish authenticated administrator/leader roles, verify each leader's active appointment and delegated organisational scope, and enforce those checks before decentralized management is enabled.
+
 ## Appointment and reporting data
 
 - `appointments.person_uid`: Firebase UID for the appointed person.
@@ -57,4 +65,4 @@ Database version 6 is additive:
 
 ## Not included in this milestone
 
-This milestone establishes the local data model only. It does not yet implement the management screens, automatic reporting-edge generation, inherited record queries, Firebase custom-claim changes, Firestore rules, cloud sync, or server-side audit enforcement. Those are subsequent stages and must be verified independently.
+The local Android milestone now includes the Leadership & Governance and People & connections management screens, automatic reporting-edge generation, explicit reporting links, pastoral delegation review, and circular-reporting checks. It still does not implement role-based branch administration, inherited individual-record queries, Firebase custom-claim changes, Firestore rules, cloud sync, or server-side audit enforcement. Those are subsequent stages and must be verified independently.
