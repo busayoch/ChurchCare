@@ -959,37 +959,47 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         return getReadableDatabase().rawQuery("SELECT sequence,entity_type,operation,created_at,sync_state,last_error FROM change_log ORDER BY sequence DESC LIMIT 100", null);
     }
 
-    /** Export a complete logical backup, including archived rows and the durable change log. */
+    /**
+     * Export a consistent logical snapshot, including archived rows and the durable change log.
+     * A read transaction prevents concurrent edits from producing a backup whose tables
+     * represent different points in time.
+     */
     public JSONObject exportBackup() throws JSONException {
         SQLiteDatabase db = getReadableDatabase();
         JSONObject backup = new JSONObject();
-        backup.put("format", "ChurchCare-Local-Backup");
-        backup.put("schema_version", DB_VERSION);
-        backup.put("exported_at", System.currentTimeMillis());
-        JSONArray tables = new JSONArray();
-        for (String table : new String[]{"people","memberships","person_relationships","connection_invitations","members","organizations","appointments","delegations","appointment_reporting","member_connections","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
-            JSONObject tableObject = new JSONObject();
-            tableObject.put("name", table);
-            JSONArray rows = new JSONArray();
-            try (Cursor c = db.query(table, null, null, null, null, null, null)) {
-                while (c.moveToNext()) {
-                    JSONObject row = new JSONObject();
-                    for (int i = 0; i < c.getColumnCount(); i++) {
-                        String column = c.getColumnName(i);
-                        switch (c.getType(i)) {
-                            case Cursor.FIELD_TYPE_INTEGER: row.put(column, c.getLong(i)); break;
-                            case Cursor.FIELD_TYPE_FLOAT: row.put(column, c.getDouble(i)); break;
-                            case Cursor.FIELD_TYPE_STRING: row.put(column, c.getString(i)); break;
-                            default: row.put(column, JSONObject.NULL); break;
+        db.beginTransaction();
+        try {
+            backup.put("format", "ChurchCare-Local-Backup");
+            backup.put("schema_version", DB_VERSION);
+            backup.put("exported_at", System.currentTimeMillis());
+            JSONArray tables = new JSONArray();
+            for (String table : new String[]{"people","memberships","person_relationships","connection_invitations","members","organizations","appointments","delegations","appointment_reporting","member_connections","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
+                JSONObject tableObject = new JSONObject();
+                tableObject.put("name", table);
+                JSONArray rows = new JSONArray();
+                try (Cursor c = db.query(table, null, null, null, null, null, null)) {
+                    while (c.moveToNext()) {
+                        JSONObject row = new JSONObject();
+                        for (int i = 0; i < c.getColumnCount(); i++) {
+                            String column = c.getColumnName(i);
+                            switch (c.getType(i)) {
+                                case Cursor.FIELD_TYPE_INTEGER: row.put(column, c.getLong(i)); break;
+                                case Cursor.FIELD_TYPE_FLOAT: row.put(column, c.getDouble(i)); break;
+                                case Cursor.FIELD_TYPE_STRING: row.put(column, c.getString(i)); break;
+                                default: row.put(column, JSONObject.NULL); break;
+                            }
                         }
+                        rows.put(row);
                     }
-                    rows.put(row);
                 }
+                tableObject.put("rows", rows);
+                tables.put(tableObject);
             }
-            tableObject.put("rows", rows);
-            tables.put(tableObject);
+            backup.put("tables", tables);
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
         }
-        backup.put("tables", tables);
         return backup;
     }
 
@@ -1000,6 +1010,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
     public void restoreBackup(JSONObject backup) throws JSONException {
         if (!"ChurchCare-Local-Backup".equals(backup.optString("format"))
                 || backup.optInt("schema_version", -1) < 1
+                || backup.optInt("schema_version", -1) > DB_VERSION
                 || !(backup.opt("tables") instanceof JSONArray)) {
             throw new JSONException("This is not a valid ChurchCare backup.");
         }
