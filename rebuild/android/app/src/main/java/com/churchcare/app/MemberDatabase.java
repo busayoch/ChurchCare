@@ -544,6 +544,29 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             new String[]{appointmentId});
     }
 
+    /**
+     * Resolve pastoral delegation endpoints to current appointments by exact Firebase UID.
+     * A UID may legitimately have multiple current appointments; the caller must display
+     * that ambiguity instead of selecting an arbitrary appointment. This is descriptive
+     * linkage only and does not create a reporting edge or grant access.
+     */
+    public Cursor listPastoralDelegationAppointmentLinks() {
+        return getReadableDatabase().rawQuery(
+            "SELECT d.*, " +
+            "(SELECT COUNT(*) FROM appointments a WHERE a.person_uid=d.overseer_uid AND a.deleted=0 AND a.status='Current' AND d.overseer_uid IS NOT NULL AND d.overseer_uid<>'') AS overseer_appointment_count, " +
+            "(SELECT a.person_name || ' — ' || a.role || ' (' || COALESCE(o.name,'Unassigned') || ')' " +
+            " FROM appointments a LEFT JOIN organizations o ON o.id=a.organization_id " +
+            " WHERE a.person_uid=d.overseer_uid AND a.deleted=0 AND a.status='Current' " +
+            " ORDER BY a.created_at DESC LIMIT 1) AS overseer_appointment_label, " +
+            "(SELECT COUNT(*) FROM appointments a WHERE a.person_uid=d.delegate_uid AND a.deleted=0 AND a.status='Current' AND d.delegate_uid IS NOT NULL AND d.delegate_uid<>'') AS delegate_appointment_count, " +
+            "(SELECT a.person_name || ' — ' || a.role || ' (' || COALESCE(o.name,'Unassigned') || ')' " +
+            " FROM appointments a LEFT JOIN organizations o ON o.id=a.organization_id " +
+            " WHERE a.person_uid=d.delegate_uid AND a.deleted=0 AND a.status='Current' " +
+            " ORDER BY a.created_at DESC LIMIT 1) AS delegate_appointment_label " +
+            "FROM delegations d WHERE d.deleted=0 ORDER BY d.updated_at DESC,d.created_at DESC",
+            null);
+    }
+
     /** List current people-to-leader connections for a member. */
     public Cursor listMemberConnections(String memberId) {
         return getReadableDatabase().rawQuery(
