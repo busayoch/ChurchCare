@@ -680,7 +680,10 @@ public final class MemberDatabase extends SQLiteOpenHelper {
                 "WHERE mc.appointment_id=? AND mc.deleted=0 AND m.person_id<>?",
                 new Object[]{personId,appointmentId,personId});
             int migrated;
-            try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM member_connections WHERE appointment_id=? AND deleted=0", new String[]{appointmentId})) {
+            try (Cursor c = db.rawQuery(
+                    "SELECT COUNT(*) FROM member_connections mc JOIN memberships m ON m.member_id=mc.member_id " +
+                    "WHERE mc.appointment_id=? AND mc.deleted=0 AND m.person_id<>?",
+                    new String[]{appointmentId,personId})) {
                 migrated = c.moveToFirst() ? c.getInt(0) : 0;
             }
             logChange(db, "legacy_connection_resolution", appointmentId, "MATCH", now);
