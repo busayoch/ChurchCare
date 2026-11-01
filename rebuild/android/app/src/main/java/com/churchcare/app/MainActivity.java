@@ -417,6 +417,8 @@ public final class MainActivity extends Activity {
         root.addView(note);
         Button add=new Button(this); add.setText("+ Add a person"); add.setAllCaps(false);
         add.setOnClickListener(v->showAddPersonDialog()); root.addView(add);
+        Button reviewLegacy=new Button(this); reviewLegacy.setText("Review unmatched legacy connections"); reviewLegacy.setAllCaps(false);
+        reviewLegacy.setOnClickListener(v->showLegacyConnectionReview()); root.addView(reviewLegacy);
         EditText search=new EditText(this); search.setSingleLine(true); search.setHint("Search by name, phone or email"); root.addView(search);
         Button find=new Button(this); find.setText("Search people"); find.setAllCaps(false); root.addView(find);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
@@ -443,6 +445,77 @@ public final class MainActivity extends Activity {
         find.setOnClickListener(v->render.run());
         search.setOnEditorActionListener((v,action,event)->{render.run();return true;});
         render.run();
+    }
+
+    /** Manual, explicit matching for legacy appointments that could not be mapped by name. */
+    private void showLegacyConnectionReview() {
+        base("Unmatched legacy connections","Review old links that need a deliberate person match");
+        TextView note=new TextView(this);
+        note.setText("ChurchCare could not safely identify the person behind these older appointments. Select the correct person manually. No name-based guess is made, original legacy records are preserved, and matching does not mean the connection was accepted by both participants.");
+        note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(12),dp(10),dp(12),dp(10)); note.setBackgroundColor(0xFFFFFFFF);
+        root.addView(note);
+        ScrollView scroll=new ScrollView(this);
+        LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        try(Cursor c=database.listUnresolvedLegacyAppointments()) {
+            boolean found=false;
+            while(c.moveToNext()) {
+                found=true;
+                String appointmentId=get(c,"appointment_id");
+                String recordedName=get(c,"person_name");
+                String role=get(c,"role");
+                String organization=get(c,"organization_name");
+                String count=get(c,"legacy_count");
+                Button item=new Button(this); item.setAllCaps(false); item.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+                item.setText(recordedName+"\n"+role+" — "+organization+"\n"+count+" legacy connection(s) awaiting a match");
+                item.setOnClickListener(v->chooseLegacyAppointmentPerson(appointmentId,recordedName,role,organization,count));
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=dp(6); list.addView(item,lp);
+            }
+            if(!found) {
+                TextView empty=new TextView(this);
+                empty.setText("No unmatched legacy connections remain in this database.");
+                empty.setTextColor(muted); empty.setPadding(dp(12),dp(18),dp(12),dp(18)); list.addView(empty);
+            }
+        } catch(Exception error) {
+            TextView problem=new TextView(this);
+            problem.setText("Could not load unmatched legacy connections: "+error.getMessage());
+            problem.setTextColor(0xFFB00020); list.addView(problem);
+        }
+    }
+
+    private void chooseLegacyAppointmentPerson(String appointmentId,String recordedName,String role,String organization,String legacyCount) {
+        java.util.ArrayList<String> ids=new java.util.ArrayList<>();
+        java.util.ArrayList<String> labels=new java.util.ArrayList<>();
+        try(Cursor c=database.listPeople("")) {
+            while(c.moveToNext()) {
+                ids.add(get(c,"id"));
+                labels.add(get(c,"full_name")+" — "+join(get(c,"phone"),get(c,"email")));
+            }
+        }
+        if(ids.isEmpty()) {
+            new AlertDialog.Builder(this).setTitle("No people available")
+                .setMessage("Add the correct person to the People directory first, then return here to match this legacy appointment.")
+                .setPositiveButton("Add a person",(d,w)->showAddPersonDialog()).setNegativeButton("Cancel",null).show();
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle("Match legacy appointment")
+            .setMessage("Old record: "+recordedName+"\nAppointment: "+role+" — "+organization+"\nLegacy connections: "+legacyCount+"\n\nChoose the person who actually held this appointment.")
+            .setItems(labels.toArray(new String[0]),(dialog,which)->{
+                String selectedId=ids.get(which);
+                String selectedName=labels.get(which);
+                new AlertDialog.Builder(this).setTitle("Confirm person match")
+                    .setMessage("You selected:\n"+selectedName+"\n\nThis will link the appointment recorded as “"+recordedName+"” to this person and migrate its legacy connection rows into the new relationship view. The original records remain preserved. These connections will be marked LEGACY_RECORDED, not accepted.")
+                    .setNegativeButton("Go back",null).setPositiveButton("Confirm match",(d,w)->{
+                        try {
+                            int migrated=database.resolveLegacyAppointmentPerson(appointmentId,selectedId);
+                            Toast.makeText(this,"Appointment matched. "+migrated+" legacy connection record(s) retained and linked.",Toast.LENGTH_LONG).show();
+                            showLegacyConnectionReview();
+                        } catch(Exception error) {
+                            Toast.makeText(this,"Could not match appointment: "+error.getMessage(),Toast.LENGTH_LONG).show();
+                            showLegacyConnectionReview();
+                        }
+                    }).show();
+            }).setNegativeButton("Cancel",null).show();
     }
 
     private void showAddPersonDialog() {
