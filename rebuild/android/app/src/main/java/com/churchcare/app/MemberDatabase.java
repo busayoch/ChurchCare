@@ -399,7 +399,12 @@ public final class MemberDatabase extends SQLiteOpenHelper {
                 edge.put("updated_at", now);
                 edge.put("deleted", 0);
                 edge.put("sync_state", "LOCAL_ONLY");
-                db.insertWithOnConflict("appointment_reporting", null, edge, SQLiteDatabase.CONFLICT_IGNORE);
+                ContentValues reactivate = new ContentValues(edge);
+                reactivate.remove("id");
+                int changed = db.update("appointment_reporting", reactivate,
+                        "appointment_id=? AND reports_to_appointment_id=?",
+                        new String[]{appointmentId, parentId});
+                if (changed == 0) db.insertOrThrow("appointment_reporting", null, edge);
             }
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
