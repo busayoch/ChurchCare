@@ -426,17 +426,20 @@ public final class MainActivity extends Activity {
             list.removeAllViews();
             String q=search.getText().toString().trim();
             try(Cursor c=q.isEmpty()?database.listMembers():database.searchMembers(q)) {
-                if(!c.moveToFirst()) {
-                    TextView empty=new TextView(this); empty.setText("No people found. Add someone to the church directory to get started.");
-                    empty.setTextColor(muted); empty.setPadding(dp(12),dp(18),dp(12),dp(18)); list.addView(empty); return;
-                }
-                do {
+                boolean found=false;
+                while(c.moveToNext()) {
+                    if(!"Active".equalsIgnoreCase(get(c,"status"))) continue;
+                    found=true;
                     String id=get(c,"id"), name=get(c,"full_name"), phone=get(c,"phone"), org=get(c,"organization");
                     Button person=new Button(this); person.setAllCaps(false); person.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
                     person.setText(name+"\n"+join(phone,org)+"\nView connections");
                     person.setOnClickListener(v->showMemberConnections(id,name));
                     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=dp(5); list.addView(person,lp);
-                } while(c.moveToNext());
+                }
+                if(!found) {
+                    TextView empty=new TextView(this); empty.setText("No active people found. Add someone or check the member's status in the directory.");
+                    empty.setTextColor(muted); empty.setPadding(dp(12),dp(18),dp(12),dp(18)); list.addView(empty);
+                }
             }
         };
         find.setOnClickListener(v->render.run());
