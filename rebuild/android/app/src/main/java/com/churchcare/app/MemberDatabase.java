@@ -240,6 +240,31 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         return insertRecord("members", v);
     }
 
+    /** Resolve an appointment's person identity without guessing between duplicate names. */
+    private String resolveAppointmentPerson(SQLiteDatabase db, String personName) {
+        String name = personName == null ? "" : personName.trim();
+        if (name.isEmpty()) throw new IllegalArgumentException("Enter the appointed person's name.");
+        String foundId = null;
+        int matches = 0;
+        try (Cursor c = db.rawQuery(
+                "SELECT id FROM people WHERE full_name=? COLLATE NOCASE AND deleted=0 ORDER BY created_at",
+                new String[]{name})) {
+            while (c.moveToNext()) { foundId = c.getString(0); matches++; }
+        }
+        if (matches == 1) return foundId;
+        if (matches > 1) throw new IllegalArgumentException(
+            "More than one person has this exact name. Resolve the duplicate people records before linking this appointment.");
+        long now = System.currentTimeMillis();
+        String id = UUID.randomUUID().toString();
+        ContentValues person = new ContentValues();
+        person.put("id", id); person.put("full_name", name); person.put("phone", "");
+        person.put("email", ""); person.put("identity_status", "LOCAL");
+        person.put("created_at", now); person.put("updated_at", now);
+        person.put("deleted", 0); person.put("sync_state", "LOCAL_ONLY");
+        db.insertOrThrow("people", null, person);
+        return id;
+    }
+
     public String insertRecord(String table, ContentValues values) {
         checkTable(table);
         SQLiteDatabase db = getWritableDatabase();
@@ -249,6 +274,8 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         values.put("deleted", 0); values.put("sync_state", "LOCAL_ONLY");
         db.beginTransaction();
         try {
+            if ("appointments".equals(table))
+                values.put("person_id", resolveAppointmentPerson(db, values.getAsString("person_name")));
             db.insertOrThrow(table, null, values);
             logChange(db, table.equals("care_records") ? "care" : table.substring(0, table.length() - (table.endsWith("s") ? 1 : 0)), id, "CREATE", now);
             db.setTransactionSuccessful();
@@ -269,6 +296,23 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         long now = System.currentTimeMillis(); values.put("updated_at", now);
         db.beginTransaction();
         try {
+            if ("appointments".equals(table) && values.containsKey("person_name")) {
+                String nextName = values.getAsString("person_name");
+                String currentPersonId = null;
+                String currentPersonName = null;
+                try (Cursor c = db.rawQuery(
+                        "SELECT a.person_id,p.full_name FROM appointments a LEFT JOIN people p ON p.id=a.person_id WHERE a.id=? AND a.deleted=0",
+                        new String[]{id})) {
+                    if (c.moveToFirst()) {
+                        currentPersonId = c.isNull(0) ? null : c.getString(0);
+                        currentPersonName = c.isNull(1) ? null : c.getString(1);
+                    }
+                }
+                if (currentPersonId != null && currentPersonName != null && currentPersonName.equalsIgnoreCase(nextName == null ? "" : nextName.trim()))
+                    values.put("person_id", currentPersonId);
+                else
+                    values.put("person_id", resolveAppointmentPerson(db, nextName));
+            }
             db.update(table, values, "id=? AND deleted=0", new String[]{id});
             logChange(db, table.equals("care_records") ? "care" : table.substring(0, table.length() - (table.endsWith("s") ? 1 : 0)), id, "UPDATE", now);
             db.setTransactionSuccessful();
