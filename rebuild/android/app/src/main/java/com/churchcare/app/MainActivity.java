@@ -6,6 +6,10 @@ import android.content.ContentValues;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.net.Uri;
+import android.content.ContentUris;
+import android.provider.ContactsContract;
+import android.util.Xml;
+import org.xmlpull.v1.XmlPullParser;
 import org.json.JSONObject;
 import org.json.JSONArray;
 import java.io.ByteArrayInputStream;
@@ -40,6 +44,8 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -65,6 +71,13 @@ public final class MainActivity extends Activity {
     private LinearLayout root;
     private int blue = 0xFF0B4F85, ink = 0xFF172B3A, muted = 0xFF526273, paper = 0xFFF4F7FA;
     private static final int PICK_MEMBER_PHOTO = 7104;
+    private static final int PICK_MEMBER_CONTACT = 7109;
+    private static final int IMPORT_MEMBER_XLSX = 7110;
+    private static final int EXPORT_MEMBER_TEMPLATE = 7111;
+    private EditText memberNameInput;
+    private EditText memberPhoneInput;
+    private TextView memberPhotoStatus;
+    private String pendingMemberPhotoPath = "";
     private static final int EXPORT_BACKUP = 7105;
     private static final int IMPORT_BACKUP = 7106;
     private static final int DRIVE_AUTHORIZATION = 7107;
@@ -328,7 +341,7 @@ public final class MainActivity extends Activity {
 
         TextView everyday=new TextView(this); everyday.setText("Everyday tasks"); everyday.setTextColor(blue); everyday.setTextSize(18); everyday.setTypeface(null,1);
         LinearLayout.LayoutParams eh=new LinearLayout.LayoutParams(-1,-2); eh.bottomMargin=dp(5); content.addView(everyday,eh);
-        menuButton(content,"＋ Add a member","Save the details of someone in your church",()->showForm("members",null,null));
+        menuButton(content,"＋ Add a member","Save the details of someone in your church",this::showMemberRegistration);
         menuButton(content,"Find a member","Look up someone by name or phone number",()->showRecords("members"));
         menuButton(content,"Record a visit","Save a visit and any next step",()->showForm("visits",null,null));
         menuButton(content,"Record a care need","Make a note when someone needs support",()->showForm("care_records",null,null));
@@ -771,19 +784,55 @@ public final class MainActivity extends Activity {
      * relationship-ID validation are retained; this only changes presentation.
      */
     private void showMemberRegistration() {
-        base("Add a member", "Start with the person's name. The other details can be added now or updated later.");
+        memberNameInput=null; memberPhoneInput=null; memberPhotoStatus=null; pendingMemberPhotoPath="";
+        base("Add a member", "Add one person at a time, import a saved contact, or bring in a prepared Excel list.");
         ScrollView scroll=new ScrollView(this);
         LinearLayout form=new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(16),dp(8),dp(16),dp(16)); scroll.addView(form);
+
+        TextView importTitle=new TextView(this); importTitle.setText("Add details quickly");
+        importTitle.setTextSize(17); importTitle.setTypeface(null,1); importTitle.setTextColor(ink); form.addView(importTitle);
+        Button contact=new Button(this); contact.setAllCaps(false); contact.setText("Import from phone contacts");
+        contact.setOnClickListener(v->{
+            try {
+                Intent pick=new Intent(Intent.ACTION_PICK,ContactsContract.CommonDataKinds.Phone.CONTENT_URI);
+                startActivityForResult(pick,PICK_MEMBER_CONTACT);
+            } catch(Exception error) {
+                new AlertDialog.Builder(this).setTitle("Contacts unavailable")
+                    .setMessage("This phone does not provide a contact picker that ChurchCare can open.")
+                    .setPositiveButton("OK",null).show();
+            }
+        }); form.addView(contact);
+        Button excel=new Button(this); excel.setAllCaps(false); excel.setText("Import members from Excel");
+        excel.setOnClickListener(v->{
+            Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT); pick.addCategory(Intent.CATEGORY_OPENABLE);
+            pick.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivityForResult(pick,IMPORT_MEMBER_XLSX);
+        }); form.addView(excel);
+        Button template=new Button(this); template.setAllCaps(false); template.setText("Download Excel member template");
+        template.setOnClickListener(v->{
+            Intent save=new Intent(Intent.ACTION_CREATE_DOCUMENT); save.addCategory(Intent.CATEGORY_OPENABLE);
+            save.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            save.putExtra(Intent.EXTRA_TITLE,"ChurchCare-Member-Import-Template.xlsx");
+            startActivityForResult(save,EXPORT_MEMBER_TEMPLATE);
+        }); form.addView(template);
+        TextView importHelp=new TextView(this);
+        importHelp.setText("Excel import accepts .xlsx files. Review the member list before saving; the import is added as one transaction so a failed batch will not leave a partial list.");
+        importHelp.setTextColor(muted); importHelp.setTextSize(12); importHelp.setPadding(0,dp(4),0,dp(12)); form.addView(importHelp);
+
         TextView identityTitle=new TextView(this); identityTitle.setText("1. Person's details");
         identityTitle.setTextSize(17); identityTitle.setTypeface(null,1); identityTitle.setTextColor(ink);
         form.addView(identityTitle);
         TextView identityHelp=new TextView(this); identityHelp.setText("Enter the name the church knows this person by. A phone number is helpful but not required.");
         identityHelp.setTextColor(muted); identityHelp.setPadding(0,dp(4),0,dp(8)); form.addView(identityHelp);
-        EditText name=new EditText(this); name.setSingleLine(true); name.setHint("Full name *");
+        EditText name=new EditText(this); memberNameInput=name; name.setSingleLine(true); name.setHint("Full name *");
         name.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS); form.addView(name);
-        EditText phone=new EditText(this); phone.setSingleLine(true); phone.setHint("Phone number (optional)");
+        EditText phone=new EditText(this); memberPhoneInput=phone; phone.setSingleLine(true); phone.setHint("Phone number (optional)");
         phone.setInputType(PHONE); form.addView(phone);
+        TextView photoStatus=new TextView(this); memberPhotoStatus=photoStatus;
+        photoStatus.setText("No contact photo selected"); photoStatus.setTextColor(muted); photoStatus.setTextSize(12); form.addView(photoStatus);
+
         TextView connectionTitle=new TextView(this); connectionTitle.setText("2. Church connection");
         connectionTitle.setTextSize(17); connectionTitle.setTypeface(null,1); connectionTitle.setTextColor(ink);
         connectionTitle.setPadding(0,dp(14),0,0); form.addView(connectionTitle);
@@ -798,7 +847,7 @@ public final class MainActivity extends Activity {
         statusButton.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Member status")
             .setItems(new String[]{"Active","Inactive"},(d,w)->{status[0]=w==0?"Active":"Inactive";statusButton.setText("Member status: "+status[0]);}).show());
         form.addView(statusButton);
-        TextView privacy=new TextView(this); privacy.setText("Only add information needed by your church. You can update this member's details later.");
+        TextView privacy=new TextView(this); privacy.setText("Only add information needed by your church. Contact details and photos are copied only after you choose a contact. You can update this member's details later.");
         privacy.setTextColor(muted); privacy.setTextSize(12); privacy.setPadding(0,dp(12),0,dp(4)); form.addView(privacy);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         Button save=new Button(this); save.setText("Save member"); save.setAllCaps(false);
@@ -811,6 +860,7 @@ public final class MainActivity extends Activity {
             values.put("organization",organization.getText().toString().trim());
             values.put("address",address.getText().toString().trim());
             values.put("status",status[0]);
+            if(!pendingMemberPhotoPath.isEmpty()) values.put("profile_photo_path",pendingMemberPhotoPath);
             String selectedId=organization.getTag()==null?null:String.valueOf(organization.getTag());
             if(!values.getAsString("organization").isEmpty() && selectedId==null) {
                 organization.setError("Choose a branch from the list");return;
@@ -829,6 +879,272 @@ public final class MainActivity extends Activity {
             }
         });
         root.addView(save);
+    }
+
+    private String saveContactPhoto(long contactId) {
+        if(contactId<=0) return "";
+        File directory=new File(getFilesDir(),"member-photos");
+        if(!directory.exists()&&!directory.mkdirs()) return "";
+        File target=new File(directory,"contact_"+contactId+"_"+System.currentTimeMillis()+".jpg");
+        try(InputStream in=ContactsContract.Contacts.openContactPhotoInputStream(
+                    getContentResolver(),ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI,contactId),true);
+            OutputStream out=new FileOutputStream(target)) {
+            if(in==null) return "";
+            byte[] buffer=new byte[8192]; int count; long total=0;
+            while((count=in.read(buffer))!=-1) {
+                total+=count; if(total>10L*1024L*1024L) throw new java.io.IOException("Contact photo is too large.");
+                out.write(buffer,0,count);
+            }
+            return total>0?target.getAbsolutePath():"";
+        } catch(Exception error) {
+            android.util.Log.w("ChurchCare","Contact photo was not available",error);
+            if(target.exists()) target.delete();
+            return "";
+        }
+    }
+
+    private void handlePickedContact(Uri uri) {
+        String displayName="",number=""; long contactId=-1;
+        String[] columns={ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER,ContactsContract.CommonDataKinds.Phone.CONTACT_ID};
+        try(Cursor cursor=getContentResolver().query(uri,columns,null,null,null)) {
+            if(cursor!=null&&cursor.moveToFirst()) {
+                int n=cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME);
+                int p=cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+                int id=cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID);
+                if(n>=0) displayName=cursor.getString(n);
+                if(p>=0) number=cursor.getString(p);
+                if(id>=0) contactId=cursor.getLong(id);
+            }
+        }
+        if(memberNameInput==null||memberPhoneInput==null) { showMemberRegistration(); }
+        if(memberNameInput!=null&&!displayName.trim().isEmpty()) memberNameInput.setText(displayName.trim());
+        if(memberPhoneInput!=null&&!number.trim().isEmpty()) memberPhoneInput.setText(number.trim());
+        pendingMemberPhotoPath=saveContactPhoto(contactId);
+        if(memberPhotoStatus!=null) memberPhotoStatus.setText(pendingMemberPhotoPath.isEmpty()
+            ?"Contact details imported; no photo was available":"Contact photo imported and will be saved as the member thumbnail");
+        Toast.makeText(this,"Contact details added to the member form",Toast.LENGTH_SHORT).show();
+    }
+
+    private static final class MemberImportPreview {
+        final ArrayList<ContentValues> valid=new ArrayList<>();
+        final ArrayList<String> issues=new ArrayList<>();
+        int nonEmptyRows;
+    }
+
+    private void startMemberExcelImport(Uri uri) {
+        try(InputStream in=getContentResolver().openInputStream(uri)) {
+            if(in==null) throw new java.io.IOException("Could not open the selected spreadsheet.");
+            MemberImportPreview preview=parseMemberWorkbook(in);
+            if(preview.nonEmptyRows==0) throw new java.io.IOException("The first worksheet does not contain any member rows.");
+            if(preview.valid.isEmpty()) {
+                new AlertDialog.Builder(this).setTitle("No members ready to import")
+                    .setMessage("No valid member rows were found. Check that the first row contains the template headings and that every member has a full name.")
+                    .setPositiveButton("OK",null).show(); return;
+            }
+            StringBuilder summary=new StringBuilder();
+            summary.append(preview.valid.size()).append(" member(s) are ready to add.");
+            if(!preview.issues.isEmpty()) {
+                summary.append("\n\n").append(preview.issues.size()).append(" row(s) will be skipped:");
+                for(int i=0;i<Math.min(8,preview.issues.size());i++) summary.append("\n• ").append(preview.issues.get(i));
+                if(preview.issues.size()>8) summary.append("\n• and ").append(preview.issues.size()-8).append(" more");
+            }
+            summary.append("\n\nPlease check the count before continuing. Existing members will not be overwritten.");
+            new AlertDialog.Builder(this).setTitle("Review Excel import").setMessage(summary.toString())
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Add "+preview.valid.size()+" members",(dialog,which)->{
+                    try {
+                        int count=database.insertMembersBatch(preview.valid);
+                        new AlertDialog.Builder(this).setTitle("Members imported")
+                            .setMessage(count+" member(s) were added successfully. You can find them in the member list.")
+                            .setPositiveButton("View members",(d,w)->showRecords("members"))
+                            .setOnCancelListener(d->showRecords("members")).show();
+                    } catch(Exception error) {
+                        android.util.Log.e("ChurchCare","Member spreadsheet batch failed",error);
+                        new AlertDialog.Builder(this).setTitle("Import not completed")
+                            .setMessage("ChurchCare could not save this batch. No partial import was kept; your existing member records remain unchanged.")
+                            .setPositiveButton("OK",(d,w)->showMemberRegistration()).show();
+                    }
+                }).show();
+        } catch(Exception error) {
+            android.util.Log.e("ChurchCare","Member spreadsheet could not be read",error);
+            new AlertDialog.Builder(this).setTitle("Could not read Excel file")
+                .setMessage("Choose a valid .xlsx workbook created from the ChurchCare member template. The file was not imported. Details: "+error.getClass().getSimpleName())
+                .setPositiveButton("OK",null).show();
+        }
+    }
+
+    private MemberImportPreview parseMemberWorkbook(InputStream input) throws Exception {
+        HashMap<String,byte[]> entries=new HashMap<>();
+        try(ZipInputStream zip=new ZipInputStream(input)) {
+            ZipEntry entry; byte[] buffer=new byte[8192]; long expanded=0; int count=0;
+            while((entry=zip.getNextEntry())!=null) {
+                if(++count>300) throw new java.io.IOException("Spreadsheet contains too many parts.");
+                ByteArrayOutputStream bytes=new ByteArrayOutputStream(); int n;
+                while((n=zip.read(buffer))!=-1) {
+                    expanded+=n; if(expanded>30L*1024L*1024L) throw new java.io.IOException("Spreadsheet is too large to import safely.");
+                    bytes.write(buffer,0,n);
+                }
+                entries.put(entry.getName(),bytes.toByteArray()); zip.closeEntry();
+            }
+        }
+        byte[] sheet=entries.get("xl/worksheets/sheet1.xml");
+        if(sheet==null) throw new java.io.IOException("The workbook has no first worksheet.");
+        ArrayList<String> shared=new ArrayList<>();
+        byte[] sharedBytes=entries.get("xl/sharedStrings.xml");
+        if(sharedBytes!=null) shared=parseSharedStrings(sharedBytes);
+        ArrayList<ArrayList<String>> rows=parseWorksheetRows(sheet,shared);
+        if(rows.isEmpty()) throw new java.io.IOException("The worksheet is empty.");
+        ArrayList<String> headers=rows.get(0);
+        int nameCol=findMemberHeader(headers,"fullname","name","membername");
+        int phoneCol=findMemberHeader(headers,"phonenumber","phone","mobile","mobilenumber");
+        int branchCol=findMemberHeader(headers,"branchunit","branch","unit","churchbranch","organization");
+        int addressCol=findMemberHeader(headers,"addresslocation","address","location");
+        int statusCol=findMemberHeader(headers,"status","memberstatus");
+        if(nameCol<0) throw new java.io.IOException("The required Full name column is missing.");
+        MemberImportPreview result=new MemberImportPreview();
+        for(int r=1;r<rows.size();r++) {
+            ArrayList<String> row=rows.get(r);
+            boolean blank=true; for(String value:row) if(value!=null&&!value.trim().isEmpty()){blank=false;break;}
+            if(blank) continue;
+            result.nonEmptyRows++;
+            String fullName=cell(row,nameCol);
+            if(fullName.isEmpty()) { result.issues.add("Row "+(r+1)+": full name is missing"); continue; }
+            String status=statusCol<0?"Active":cell(row,statusCol);
+            if(status.isEmpty()) status="Active";
+            if(!status.equalsIgnoreCase("active")&&!status.equalsIgnoreCase("inactive")) {
+                result.issues.add("Row "+(r+1)+": status must be Active or Inactive"); continue;
+            }
+            ContentValues values=new ContentValues();
+            values.put("full_name",fullName);
+            values.put("phone",cell(row,phoneCol));
+            values.put("organization",cell(row,branchCol));
+            values.put("address",cell(row,addressCol));
+            values.put("status",status.equalsIgnoreCase("inactive")?"Inactive":"Active");
+            values.putNull("organization_id");
+            result.valid.add(values);
+        }
+        return result;
+    }
+
+    private static String cell(ArrayList<String> row,int index) {
+        return index<0||index>=row.size()||row.get(index)==null?"":row.get(index).trim();
+    }
+    private static String normalizeMemberHeader(String value) {
+        return value==null?"":value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]","");
+    }
+    private static int findMemberHeader(ArrayList<String> headers,String... names) {
+        for(int i=0;i<headers.size();i++) {
+            String found=normalizeMemberHeader(headers.get(i));
+            for(String name:names) if(found.equals(name)) return i;
+        }
+        return -1;
+    }
+    private static int columnIndex(String reference) {
+        if(reference==null) return 0;
+        int value=0,letters=0;
+        for(int i=0;i<reference.length();i++) {
+            char c=reference.charAt(i);
+            if(c>='A'&&c<='Z'){value=value*26+(c-'A'+1);letters++;}
+            else if(c>='a'&&c<='z'){value=value*26+(c-'a'+1);letters++;}
+            else break;
+        }
+        return Math.max(0,value-1);
+    }
+    private ArrayList<String> parseSharedStrings(byte[] xml) throws Exception {
+        ArrayList<String> values=new ArrayList<>();
+        XmlPullParser parser=Xml.newPullParser(); parser.setInput(new ByteArrayInputStream(xml),"UTF-8");
+        int event=parser.getEventType();
+        while(event!=XmlPullParser.END_DOCUMENT) {
+            if(event==XmlPullParser.START_TAG&&parser.getName().equals("si")) {
+                StringBuilder value=new StringBuilder();
+                while((event=parser.next())!=XmlPullParser.END_TAG||!parser.getName().equals("si")) {
+                    if(event==XmlPullParser.START_TAG&&parser.getName().equals("t")) value.append(parser.nextText());
+                }
+                values.add(value.toString());
+            }
+            event=parser.next();
+        }
+        return values;
+    }
+    private ArrayList<ArrayList<String>> parseWorksheetRows(byte[] xml,ArrayList<String> shared) throws Exception {
+        ArrayList<ArrayList<String>> rows=new ArrayList<>();
+        XmlPullParser parser=Xml.newPullParser(); parser.setInput(new ByteArrayInputStream(xml),"UTF-8");
+        ArrayList<String> row=null; int event=parser.getEventType();
+        while(event!=XmlPullParser.END_DOCUMENT) {
+            if(event==XmlPullParser.START_TAG&&parser.getName().equals("row")) {
+                row=new ArrayList<>();
+            } else if(event==XmlPullParser.START_TAG&&parser.getName().equals("c")&&row!=null) {
+                String ref=parser.getAttributeValue(null,"r"),type=parser.getAttributeValue(null,"t");
+                int col=columnIndex(ref); StringBuilder value=new StringBuilder();
+                while((event=parser.next())!=XmlPullParser.END_TAG||!parser.getName().equals("c")) {
+                    if(event==XmlPullParser.START_TAG&&(parser.getName().equals("v")||parser.getName().equals("t"))) {
+                        String part=parser.nextText();
+                        if("inlineStr".equals(type)) value.append(part); else value.setLength(0); if(!"inlineStr".equals(type)) value.append(part);
+                    }
+                }
+                String text=value.toString();
+                if("s".equals(type)) {
+                    try { int index=Integer.parseInt(text); text=index>=0&&index<shared.size()?shared.get(index):""; }
+                    catch(NumberFormatException ignored){text="";}
+                }
+                while(row.size()<=col) row.add("");
+                row.set(col,text);
+            } else if(event==XmlPullParser.END_TAG&&parser.getName().equals("row")&&row!=null) {
+                rows.add(row); row=null;
+            }
+            event=parser.next();
+        }
+        return rows;
+    }
+
+    private void writeMemberTemplate(OutputStream output) throws Exception {
+        ZipOutputStream zip=new ZipOutputStream(output);
+        writeZipText(zip,"[Content_Types].xml",
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/></Types>");
+        writeZipText(zip,"_rels/.rels",
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>");
+        writeZipText(zip,"xl/workbook.xml",
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Members\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Instructions\" sheetId=\"2\" r:id=\"rId2\"/></sheets></workbook>");
+        writeZipText(zip,"xl/_rels/workbook.xml.rels",
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/></Relationships>");
+        ArrayList<String[]> memberRows=new ArrayList<>();
+        memberRows.add(new String[]{"Full name *","Phone number","Branch / unit","Address / location","Status"});
+        writeZipText(zip,"xl/worksheets/sheet1.xml",worksheetXml(memberRows));
+        ArrayList<String[]> instructions=new ArrayList<>();
+        instructions.add(new String[]{"ChurchCare member import template"});
+        instructions.add(new String[]{"Enter one member on each row of the Members sheet."});
+        instructions.add(new String[]{"Full name is required. Phone number, branch, address and status are optional."});
+        instructions.add(new String[]{"Status must be Active or Inactive. If left blank, ChurchCare uses Active."});
+        instructions.add(new String[]{"Do not rename or remove the column headings in row 1."});
+        instructions.add(new String[]{"Branch / unit text is imported as supplied; choose a branch in the app to link it to a church record."});
+        instructions.add(new String[]{"This template contains no sample member records."});
+        writeZipText(zip,"xl/worksheets/sheet2.xml",worksheetXml(instructions));
+        zip.finish(); zip.flush();
+    }
+    private static void writeZipText(ZipOutputStream zip,String name,String value) throws Exception {
+        zip.putNextEntry(new ZipEntry(name)); zip.write(value.getBytes(StandardCharsets.UTF_8)); zip.closeEntry();
+    }
+    private static String xmlEscape(String value) {
+        return value.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;").replace("'","&apos;");
+    }
+    private static String columnName(int number) {
+        StringBuilder value=new StringBuilder(); int n=number+1;
+        while(n>0){int rem=(n-1)%26;value.insert(0,(char)('A'+rem));n=(n-1)/26;}
+        return value.toString();
+    }
+    private static String worksheetXml(List<String[]> rows) {
+        StringBuilder xml=new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
+        for(int r=0;r<rows.size();r++) {
+            xml.append("<row r=\"").append(r+1).append("\">");
+            String[] cells=rows.get(r);
+            for(int c=0;c<cells.length;c++) {
+                xml.append("<c r=\"").append(columnName(c)).append(r+1).append("\" t=\"inlineStr\"><is><t xml:space=\"preserve\">")
+                    .append(xmlEscape(cells[c])).append("</t></is></c>");
+            }
+            xml.append("</row>");
+        }
+        return xml.append("</sheetData></worksheet>").toString();
     }
 
     private void showRecords(String table) {
@@ -1609,6 +1925,30 @@ public final class MainActivity extends Activity {
             } catch (Exception e) {
                 android.util.Log.e("ChurchCare", "Backup restore failed", e);
                 new AlertDialog.Builder(this).setTitle("Restore failed").setMessage("ChurchCare could not restore this file. Your current database should remain unchanged if validation or the restore transaction failed. Details: " + e.getClass().getSimpleName()).setPositiveButton("OK", null).show();
+            }
+            return;
+        }
+        if(resultCode==RESULT_OK && data!=null && data.getData()!=null && requestCode==PICK_MEMBER_CONTACT) {
+            try { handlePickedContact(data.getData()); }
+            catch(Exception error) {
+                android.util.Log.e("ChurchCare","Contact import failed",error);
+                Toast.makeText(this,"Could not read that contact. You can enter the details manually.",Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
+        if(resultCode==RESULT_OK && data!=null && data.getData()!=null && requestCode==IMPORT_MEMBER_XLSX) {
+            startMemberExcelImport(data.getData()); return;
+        }
+        if(resultCode==RESULT_OK && data!=null && data.getData()!=null && requestCode==EXPORT_MEMBER_TEMPLATE) {
+            try(OutputStream out=getContentResolver().openOutputStream(data.getData(),"w")) {
+                if(out==null) throw new java.io.IOException("Could not open the selected save location.");
+                writeMemberTemplate(out);
+                Toast.makeText(this,"Excel template saved. Fill in the Members sheet, then import it here.",Toast.LENGTH_LONG).show();
+            } catch(Exception error) {
+                android.util.Log.e("ChurchCare","Member template export failed",error);
+                new AlertDialog.Builder(this).setTitle("Template not saved")
+                    .setMessage("ChurchCare could not write the Excel template to that location. Please choose another folder.")
+                    .setPositiveButton("OK",null).show();
             }
             return;
         }
