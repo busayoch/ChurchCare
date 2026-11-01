@@ -20,7 +20,7 @@ import java.util.UUID;
  */
 public final class MemberDatabase extends SQLiteOpenHelper {
     private static final String DB_NAME = "churchcare_local.db";
-    private static final int DB_VERSION = 7;
+    private static final int DB_VERSION = 8;
     private static final Set<String> TABLES = new HashSet<>(Arrays.asList(
         "members", "organizations", "appointments", "delegations", "visits", "care_records"
     ));
@@ -35,6 +35,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         createDomainTables(db);
         createGovernanceTables(db);
         createMemberConnectionsTable(db);
+        createPeopleRelationshipTables(db);
         createChurchProfileTable(db);
         addColumnIfMissing(db, "church_profile", "template_id", "TEXT NOT NULL DEFAULT 'custom'");
         addColumnIfMissing(db, "church_profile", "structure_json", "TEXT NOT NULL DEFAULT '[]'");
@@ -76,6 +77,35 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE IF NOT EXISTS member_connections (id TEXT PRIMARY KEY NOT NULL, member_id TEXT NOT NULL, appointment_id TEXT NOT NULL, connection_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'Current', created_by_uid TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY', UNIQUE(member_id, appointment_id, connection_type))");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_member_connections_member ON member_connections(member_id, status, deleted)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_member_connections_appointment ON member_connections(appointment_id, status, deleted)");
+    }
+
+    /**
+     * Phase 2 relationship foundation. People are independent of local membership;
+     * relationships can connect people and/or specific appointments across units
+     * and departments. Invitations are local records only until secure transport exists.
+     */
+    private void createPeopleRelationshipTables(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS people (id TEXT PRIMARY KEY NOT NULL, full_name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', firebase_uid TEXT, identity_status TEXT NOT NULL DEFAULT 'LOCAL', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY')");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_people_name ON people(full_name COLLATE NOCASE)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_people_phone ON people(phone)");
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_people_firebase_uid ON people(firebase_uid) WHERE firebase_uid IS NOT NULL AND firebase_uid<>''");
+        db.execSQL("CREATE TABLE IF NOT EXISTS memberships (id TEXT PRIMARY KEY NOT NULL, person_id TEXT NOT NULL, member_id TEXT NOT NULL UNIQUE, organization_id TEXT, membership_type TEXT NOT NULL DEFAULT 'MEMBER', status TEXT NOT NULL DEFAULT 'Active', start_date TEXT NOT NULL DEFAULT '', end_date TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY')");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_memberships_person ON memberships(person_id, status, deleted)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_memberships_org ON memberships(organization_id, status, deleted)");
+        addColumnIfMissing(db, "appointments", "person_id", "TEXT");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_appointments_person_id ON appointments(person_id, status, deleted)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS person_relationships (id TEXT PRIMARY KEY NOT NULL, source_person_id TEXT NOT NULL, target_person_id TEXT NOT NULL, source_appointment_id TEXT, target_appointment_id TEXT, relationship_type TEXT NOT NULL, relationship_label TEXT NOT NULL DEFAULT '', direction TEXT NOT NULL DEFAULT 'SOURCE_TO_TARGET', scope_organization_id TEXT, status TEXT NOT NULL DEFAULT 'PROPOSED', start_date TEXT NOT NULL DEFAULT '', end_date TEXT NOT NULL DEFAULT '', initiated_by_uid TEXT, accepted_by_uid TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY', UNIQUE(source_person_id, target_person_id, relationship_type, source_appointment_id, target_appointment_id))");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_relationships_source ON person_relationships(source_person_id, status, deleted)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_relationships_target ON person_relationships(target_person_id, status, deleted)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_relationships_scope ON person_relationships(scope_organization_id, status, deleted)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS connection_invitations (id TEXT PRIMARY KEY NOT NULL, token_hash TEXT NOT NULL UNIQUE, inviter_person_id TEXT NOT NULL, invitee_person_id TEXT, invitee_name TEXT NOT NULL DEFAULT '', invitee_phone TEXT NOT NULL DEFAULT '', relationship_type TEXT NOT NULL, relationship_label TEXT NOT NULL DEFAULT '', source_appointment_id TEXT, target_appointment_id TEXT, status TEXT NOT NULL DEFAULT 'PENDING_LOCAL', expires_at INTEGER NOT NULL, accepted_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY')");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_invitations_inviter ON connection_invitations(inviter_person_id, status)");
+        // Preserve existing members as people and explicitly map their membership.
+        long now = System.currentTimeMillis();
+        db.execSQL("INSERT OR IGNORE INTO people(id,full_name,phone,identity_status,created_at,updated_at,deleted,sync_state) SELECT id,full_name,phone,'LOCAL',created_at,updated_at,deleted,sync_state FROM members");
+        db.execSQL("INSERT OR IGNORE INTO memberships(id,person_id,member_id,organization_id,membership_type,status,start_date,end_date,created_at,updated_at,deleted,sync_state) SELECT 'legacy-membership-'||id,id,id,organization_id,'MEMBER',status,'','',created_at,updated_at,deleted,sync_state FROM members");
+        // Link appointments only when an exact-name match resolves to one unique person.
+        db.execSQL("UPDATE appointments SET person_id=(SELECT MIN(p.id) FROM people p WHERE p.full_name=appointments.person_name COLLATE NOCASE) WHERE person_id IS NULL AND (SELECT COUNT(*) FROM people p WHERE p.full_name=appointments.person_name COLLATE NOCASE)=1");
     }
 
     private void createConfigurationSuggestionsTable(SQLiteDatabase db) {
@@ -125,6 +155,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         }
         if (oldVersion < 6) createGovernanceTables(db);
         if (oldVersion < 7) createMemberConnectionsTable(db);
+        if (oldVersion < 8) createPeopleRelationshipTables(db);
     }
 
     /** A local ChurchCare installation belongs to one church and one starting branch/unit. */
@@ -544,6 +575,111 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         } finally { db.endTransaction(); }
     }
 
+    /** Create an independent person identity; this does not create parish membership or an app account. */
+    public String addPersonIdentity(String fullName, String phone, String email) {
+        String name = fullName == null ? "" : fullName.trim();
+        if (name.isEmpty()) throw new IllegalArgumentException("Enter the person's name.");
+        String normalizedPhone = phone == null ? "" : phone.trim();
+        String normalizedEmail = email == null ? "" : email.trim();
+        SQLiteDatabase db = getWritableDatabase();
+        long now = System.currentTimeMillis();
+        String id = UUID.randomUUID().toString();
+        ContentValues values = new ContentValues();
+        values.put("id", id); values.put("full_name", name); values.put("phone", normalizedPhone);
+        values.put("email", normalizedEmail); values.put("identity_status", "LOCAL");
+        values.put("created_at", now); values.put("updated_at", now);
+        values.put("deleted", 0); values.put("sync_state", "LOCAL_ONLY");
+        db.insertOrThrow("people", null, values);
+        return id;
+    }
+
+    /** Add a proposed relationship. It never creates membership or grants record access. */
+    public String proposePersonRelationship(String sourcePersonId, String targetPersonId,
+            String sourceAppointmentId, String targetAppointmentId, String relationshipType,
+            String relationshipLabel, String scopeOrganizationId, String actorUid) {
+        if (sourcePersonId == null || targetPersonId == null || sourcePersonId.equals(targetPersonId))
+            throw new IllegalArgumentException("Choose two different people.");
+        String type = relationshipType == null ? "" : relationshipType.trim();
+        if (type.isEmpty()) throw new IllegalArgumentException("Choose the relationship purpose.");
+        SQLiteDatabase db = getWritableDatabase();
+        long now = System.currentTimeMillis();
+        String id = UUID.randomUUID().toString();
+        db.beginTransaction();
+        try {
+            try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM people WHERE id IN (?,?) AND deleted=0",
+                    new String[]{sourcePersonId, targetPersonId})) {
+                if (!c.moveToFirst() || c.getInt(0) != 2)
+                    throw new IllegalArgumentException("Both people must exist in the people directory.");
+            }
+            ContentValues link = new ContentValues();
+            link.put("id", id); link.put("source_person_id", sourcePersonId); link.put("target_person_id", targetPersonId);
+            if (sourceAppointmentId != null && !sourceAppointmentId.trim().isEmpty()) link.put("source_appointment_id", sourceAppointmentId);
+            if (targetAppointmentId != null && !targetAppointmentId.trim().isEmpty()) link.put("target_appointment_id", targetAppointmentId);
+            link.put("relationship_type", type); link.put("relationship_label", relationshipLabel == null ? "" : relationshipLabel.trim());
+            link.put("direction", "SOURCE_TO_TARGET");
+            if (scopeOrganizationId != null && !scopeOrganizationId.trim().isEmpty()) link.put("scope_organization_id", scopeOrganizationId);
+            link.put("status", "PROPOSED"); link.put("start_date", ""); link.put("end_date", "");
+            if (actorUid != null && !actorUid.trim().isEmpty()) link.put("initiated_by_uid", actorUid);
+            link.put("created_at", now); link.put("updated_at", now); link.put("deleted", 0); link.put("sync_state", "LOCAL_ONLY");
+            db.insertOrThrow("person_relationships", null, link);
+            logChange(db, "person_relationship", id, "CREATE", now);
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+        return id;
+    }
+
+    /** List accepted and pending relationships from either side of a person's network. */
+    public Cursor listPersonRelationships(String personId) {
+        return getReadableDatabase().rawQuery(
+            "SELECT r.id,r.source_person_id,r.target_person_id,r.source_appointment_id,r.target_appointment_id," +
+            "r.relationship_type,r.relationship_label,r.direction,r.status,r.scope_organization_id," +
+            "s.full_name AS source_name,t.full_name AS target_name " +
+            "FROM person_relationships r JOIN people s ON s.id=r.source_person_id " +
+            "JOIN people t ON t.id=r.target_person_id " +
+            "WHERE (r.source_person_id=? OR r.target_person_id=?) AND r.deleted=0 ORDER BY r.created_at DESC",
+            new String[]{personId, personId});
+    }
+
+    /** Record recipient acceptance; identity and authority are not transferred to the inviter. */
+    public void acceptPersonRelationship(String relationshipId, String acceptingUid) {
+        if (acceptingUid == null || acceptingUid.trim().isEmpty())
+            throw new IllegalArgumentException("The recipient must sign in to accept this connection.");
+        SQLiteDatabase db = getWritableDatabase();
+        long now = System.currentTimeMillis();
+        ContentValues values = new ContentValues();
+        values.put("status", "ACCEPTED"); values.put("accepted_by_uid", acceptingUid);
+        values.put("updated_at", now); values.put("sync_state", "LOCAL_ONLY");
+        int changed = db.update("person_relationships", values,
+            "id=? AND status='PROPOSED' AND deleted=0", new String[]{relationshipId});
+        if (changed == 0) throw new IllegalArgumentException("This proposed connection is no longer available.");
+        logChange(db, "person_relationship", relationshipId, "ACCEPT", now);
+    }
+
+    /** Store a local invitation draft. No delivery or cross-device claim is implied. */
+    public String createLocalConnectionInvitation(String inviterPersonId, String inviteeName,
+            String inviteePhone, String relationshipType, String relationshipLabel,
+            String sourceAppointmentId, String targetAppointmentId, long lifetimeMillis) {
+        if (inviterPersonId == null || inviteeName == null || inviteeName.trim().isEmpty())
+            throw new IllegalArgumentException("An inviter and recipient name are required.");
+        if (relationshipType == null || relationshipType.trim().isEmpty())
+            throw new IllegalArgumentException("Choose the relationship purpose.");
+        SQLiteDatabase db = getWritableDatabase();
+        long now = System.currentTimeMillis();
+        String id = UUID.randomUUID().toString();
+        String token = UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
+        String tokenHash = Integer.toHexString(token.hashCode()); // local placeholder only; replace with cryptographic hash before any transport
+        ContentValues invite = new ContentValues();
+        invite.put("id", id); invite.put("token_hash", tokenHash); invite.put("inviter_person_id", inviterPersonId);
+        invite.put("invitee_name", inviteeName.trim()); invite.put("invitee_phone", inviteePhone == null ? "" : inviteePhone.trim());
+        invite.put("relationship_type", relationshipType.trim()); invite.put("relationship_label", relationshipLabel == null ? "" : relationshipLabel.trim());
+        if (sourceAppointmentId != null) invite.put("source_appointment_id", sourceAppointmentId);
+        if (targetAppointmentId != null) invite.put("target_appointment_id", targetAppointmentId);
+        invite.put("status", "PENDING_LOCAL"); invite.put("expires_at", now + Math.max(60000L, lifetimeMillis));
+        invite.put("created_at", now); invite.put("updated_at", now); invite.put("sync_state", "LOCAL_ONLY");
+        db.insertOrThrow("connection_invitations", null, invite);
+        return id;
+    }
+
     /** Return true when adding child -> proposed parent would close a reporting cycle. */
     public boolean wouldCreateReportingCycle(String appointmentId, String proposedParentId) {
         if (appointmentId == null || proposedParentId == null) return true;
@@ -679,7 +815,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         backup.put("schema_version", DB_VERSION);
         backup.put("exported_at", System.currentTimeMillis());
         JSONArray tables = new JSONArray();
-        for (String table : new String[]{"members","organizations","appointments","delegations","appointment_reporting","member_connections","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
+        for (String table : new String[]{"people","memberships","person_relationships","connection_invitations","members","organizations","appointments","delegations","appointment_reporting","member_connections","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
             JSONObject tableObject = new JSONObject();
             tableObject.put("name", table);
             JSONArray rows = new JSONArray();
@@ -720,7 +856,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         for (int i = 0; i < tableArray.length(); i++) {
             JSONObject tableObject = tableArray.getJSONObject(i);
             String name = tableObject.optString("name", "");
-            if (!Arrays.asList("members","organizations","appointments","delegations","appointment_reporting","member_connections","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions").contains(name)
+            if (!Arrays.asList("people","memberships","person_relationships","connection_invitations","members","organizations","appointments","delegations","appointment_reporting","member_connections","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions").contains(name)
                     || !(tableObject.opt("rows") instanceof JSONArray) || incoming.containsKey(name)) {
                 throw new JSONException("The backup contains an invalid or duplicate table.");
             }
@@ -733,12 +869,12 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
         try {
-            for (String table : new String[]{"change_log","governance_audit","member_connections","appointment_reporting","visits","care_records","appointments","delegations","members","organizations"}) {
+            for (String table : new String[]{"change_log","governance_audit","person_relationships","connection_invitations","memberships","people","member_connections","appointment_reporting","visits","care_records","appointments","delegations","members","organizations"}) {
                 db.delete(table, null, null);
             }
             if (incoming.containsKey("church_profile")) db.delete("church_profile", null, null);
             if (incoming.containsKey("configuration_suggestions")) db.delete("configuration_suggestions", null, null);
-            for (String table : new String[]{"members","organizations","appointments","delegations","appointment_reporting","member_connections","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
+            for (String table : new String[]{"people","memberships","person_relationships","connection_invitations","members","organizations","appointments","delegations","appointment_reporting","member_connections","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
                 if (!incoming.containsKey(table)) continue;
                 JSONArray rows = incoming.get(table);
                 for (int i = 0; i < rows.length(); i++) {
