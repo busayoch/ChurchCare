@@ -20,7 +20,7 @@ import java.util.UUID;
  */
 public final class MemberDatabase extends SQLiteOpenHelper {
     private static final String DB_NAME = "churchcare_local.db";
-    private static final int DB_VERSION = 6;
+    private static final int DB_VERSION = 7;
     private static final Set<String> TABLES = new HashSet<>(Arrays.asList(
         "members", "organizations", "appointments", "delegations", "visits", "care_records"
     ));
@@ -34,6 +34,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         createBaseTables(db);
         createDomainTables(db);
         createGovernanceTables(db);
+        createMemberConnectionsTable(db);
         createChurchProfileTable(db);
         addColumnIfMissing(db, "church_profile", "template_id", "TEXT NOT NULL DEFAULT 'custom'");
         addColumnIfMissing(db, "church_profile", "structure_json", "TEXT NOT NULL DEFAULT '[]'");
@@ -68,6 +69,13 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE IF NOT EXISTS governance_audit (id TEXT PRIMARY KEY NOT NULL, actor_uid TEXT NOT NULL, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, organization_id TEXT, details_json TEXT NOT NULL DEFAULT '{}', occurred_at INTEGER NOT NULL, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY')");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_governance_audit_actor_time ON governance_audit(actor_uid, occurred_at DESC)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_governance_audit_entity_time ON governance_audit(entity_type, entity_id, occurred_at DESC)");
+    }
+
+    /** Person-to-person church connections. These local links do not grant record access. */
+    private void createMemberConnectionsTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS member_connections (id TEXT PRIMARY KEY NOT NULL, member_id TEXT NOT NULL, appointment_id TEXT NOT NULL, connection_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'Current', created_by_uid TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY', UNIQUE(member_id, appointment_id, connection_type))");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_member_connections_member ON member_connections(member_id, status, deleted)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_member_connections_appointment ON member_connections(appointment_id, status, deleted)");
     }
 
     private void createConfigurationSuggestionsTable(SQLiteDatabase db) {
@@ -116,6 +124,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             createConfigurationSuggestionsTable(db);
         }
         if (oldVersion < 6) createGovernanceTables(db);
+        if (oldVersion < 7) createMemberConnectionsTable(db);
     }
 
     /** A local ChurchCare installation belongs to one church and one starting branch/unit. */
@@ -453,6 +462,74 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             new String[]{appointmentId});
     }
 
+    /** List current people-to-leader connections for a member. */
+    public Cursor listMemberConnections(String memberId) {
+        return getReadableDatabase().rawQuery(
+            "SELECT mc.id,mc.connection_type,mc.appointment_id,a.person_name,a.role,COALESCE(o.name,'Unassigned') AS organization_name " +
+            "FROM member_connections mc JOIN appointments a ON a.id=mc.appointment_id " +
+            "LEFT JOIN organizations o ON o.id=a.organization_id " +
+            "WHERE mc.member_id=? AND mc.deleted=0 AND mc.status='Current' AND a.deleted=0 AND a.status='Current' " +
+            "ORDER BY mc.connection_type COLLATE NOCASE,a.person_name COLLATE NOCASE",
+            new String[]{memberId});
+    }
+
+    /** Create a simple person-to-leader link. Identity login is optional. */
+    public void addMemberConnection(String memberId, String appointmentId, String connectionType, String actorUid) {
+        if (memberId == null || appointmentId == null || connectionType == null || connectionType.trim().isEmpty())
+            throw new IllegalArgumentException("Choose a person, a church leader and a connection type.");
+        SQLiteDatabase db=getWritableDatabase();
+        long now=System.currentTimeMillis();
+        db.beginTransaction();
+        try {
+            try(Cursor c=db.rawQuery(
+                    "SELECT (SELECT COUNT(*) FROM members WHERE id=? AND deleted=0 AND status='Active') + " +
+                    "(SELECT COUNT(*) FROM appointments WHERE id=? AND deleted=0 AND status='Current')",
+                    new String[]{memberId,appointmentId})) {
+                if(!c.moveToFirst() || c.getInt(0)!=2)
+                    throw new IllegalArgumentException("Choose an active member and a current leadership appointment.");
+            }
+            ContentValues link=new ContentValues();
+            link.put("id",UUID.randomUUID().toString()); link.put("member_id",memberId);
+            link.put("appointment_id",appointmentId); link.put("connection_type",connectionType.trim());
+            link.put("status","Current"); if(actorUid!=null&&!actorUid.trim().isEmpty()) link.put("created_by_uid",actorUid);
+            link.put("created_at",now); link.put("updated_at",now); link.put("deleted",0); link.put("sync_state","LOCAL_ONLY");
+            db.insertOrThrow("member_connections",null,link);
+            logChange(db,"member_connection",link.getAsString("id"),"CREATE",now);
+            if(actorUid!=null&&!actorUid.trim().isEmpty()) {
+                ContentValues audit=new ContentValues(); audit.put("id",UUID.randomUUID().toString());
+                audit.put("actor_uid",actorUid); audit.put("action","MEMBER_CONNECTION_CREATED");
+                audit.put("entity_type","member_connection"); audit.put("entity_id",link.getAsString("id"));
+                try(Cursor c=db.query("appointments",new String[]{"organization_id"},"id=?",new String[]{appointmentId},null,null,null,"1")) {
+                    if(c.moveToFirst()&&!c.isNull(0)) audit.put("organization_id",c.getString(0));
+                }
+                audit.put("details_json","{}"); audit.put("occurred_at",now); audit.put("sync_state","LOCAL_ONLY");
+                db.insertOrThrow("governance_audit",null,audit);
+            }
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+    }
+
+    /** Retire a person-to-leader link without deleting either person or appointment. */
+    public void removeMemberConnection(String connectionId, String actorUid) {
+        SQLiteDatabase db=getWritableDatabase(); long now=System.currentTimeMillis();
+        db.beginTransaction();
+        try {
+            ContentValues retired=new ContentValues(); retired.put("status","Completed");
+            retired.put("deleted",1); retired.put("updated_at",now); retired.put("sync_state","LOCAL_ONLY");
+            int changed=db.update("member_connections",retired,"id=? AND deleted=0 AND status='Current'",new String[]{connectionId});
+            if(changed==0) throw new IllegalArgumentException("This connection is no longer active.");
+            logChange(db,"member_connection",connectionId,"DELETE",now);
+            if(actorUid!=null&&!actorUid.trim().isEmpty()) {
+                ContentValues audit=new ContentValues(); audit.put("id",UUID.randomUUID().toString());
+                audit.put("actor_uid",actorUid); audit.put("action","MEMBER_CONNECTION_RETIRED");
+                audit.put("entity_type","member_connection"); audit.put("entity_id",connectionId);
+                audit.put("details_json","{}"); audit.put("occurred_at",now); audit.put("sync_state","LOCAL_ONLY");
+                db.insertOrThrow("governance_audit",null,audit);
+            }
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+    }
+
     /** Return true when adding child -> proposed parent would close a reporting cycle. */
     public boolean wouldCreateReportingCycle(String appointmentId, String proposedParentId) {
         if (appointmentId == null || proposedParentId == null) return true;
@@ -588,7 +665,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         backup.put("schema_version", DB_VERSION);
         backup.put("exported_at", System.currentTimeMillis());
         JSONArray tables = new JSONArray();
-        for (String table : new String[]{"members","organizations","appointments","delegations","appointment_reporting","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
+        for (String table : new String[]{"members","organizations","appointments","delegations","appointment_reporting","member_connections","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
             JSONObject tableObject = new JSONObject();
             tableObject.put("name", table);
             JSONArray rows = new JSONArray();
@@ -629,7 +706,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         for (int i = 0; i < tableArray.length(); i++) {
             JSONObject tableObject = tableArray.getJSONObject(i);
             String name = tableObject.optString("name", "");
-            if (!Arrays.asList("members","organizations","appointments","delegations","appointment_reporting","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions").contains(name)
+            if (!Arrays.asList("members","organizations","appointments","delegations","appointment_reporting","member_connections","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions").contains(name)
                     || !(tableObject.opt("rows") instanceof JSONArray) || incoming.containsKey(name)) {
                 throw new JSONException("The backup contains an invalid or duplicate table.");
             }
@@ -642,12 +719,12 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
         try {
-            for (String table : new String[]{"change_log","governance_audit","appointment_reporting","visits","care_records","appointments","delegations","members","organizations"}) {
+            for (String table : new String[]{"change_log","governance_audit","member_connections","appointment_reporting","visits","care_records","appointments","delegations","members","organizations"}) {
                 db.delete(table, null, null);
             }
             if (incoming.containsKey("church_profile")) db.delete("church_profile", null, null);
             if (incoming.containsKey("configuration_suggestions")) db.delete("configuration_suggestions", null, null);
-            for (String table : new String[]{"members","organizations","appointments","delegations","appointment_reporting","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
+            for (String table : new String[]{"members","organizations","appointments","delegations","appointment_reporting","member_connections","governance_audit","visits","care_records","change_log","church_profile","configuration_suggestions"}) {
                 if (!incoming.containsKey(table)) continue;
                 JSONArray rows = incoming.get(table);
                 for (int i = 0; i < rows.length(); i++) {
