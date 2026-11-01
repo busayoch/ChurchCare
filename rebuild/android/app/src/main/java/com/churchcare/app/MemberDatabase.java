@@ -895,6 +895,9 @@ public final class MemberDatabase extends SQLiteOpenHelper {
                     db.insertOrThrow(table, null, values);
                 }
             }
+            // Older backups do not contain the Phase 2 identity tables. Rebuild
+            // people/membership mappings from restored legacy member rows safely.
+            createPeopleRelationshipTables(db);
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
