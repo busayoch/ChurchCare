@@ -335,6 +335,87 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         return path.toString();
     }
 
+    /**
+     * Rebuild the automatic upward reporting edge for a Head of Follow-up.
+     * The nearest ancestor unit with the same active position code is used;
+     * explicit pastoral relationships are never changed by this routine.
+     */
+    public int refreshAutomaticFollowUpReporting(String appointmentId) {
+        SQLiteDatabase db = getWritableDatabase();
+        long now = System.currentTimeMillis();
+        String childOrg = null, code = null, startDate = "", endDate = "";
+        try (Cursor c = db.query("appointments",
+                new String[]{"organization_id","position_code","start_date","end_date","status"},
+                "id=? AND deleted=0", new String[]{appointmentId}, null, null, null, "1")) {
+            if (!c.moveToFirst() || !"Current".equalsIgnoreCase(c.getString(4))) {
+                retireAutomaticReporting(db, appointmentId, now);
+                return 0;
+            }
+            childOrg = c.isNull(0) ? null : c.getString(0);
+            code = c.getString(1);
+            startDate = c.getString(2);
+            endDate = c.getString(3);
+        }
+        if (childOrg == null || code == null || !"HEAD_OF_FOLLOW_UP".equalsIgnoreCase(code.trim())) {
+            retireAutomaticReporting(db, appointmentId, now);
+            return 0;
+        }
+
+        java.util.ArrayList<String> ancestors = new java.util.ArrayList<>();
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        String current = childOrg;
+        while (current != null && !current.isEmpty() && seen.add(current) && ancestors.size() < 30) {
+            try (Cursor c = db.query("organizations", new String[]{"parent_id"},
+                    "id=? AND deleted=0", new String[]{current}, null, null, null, "1")) {
+                if (!c.moveToFirst() || c.isNull(0)) break;
+                current = c.getString(0);
+                ancestors.add(current);
+            }
+        }
+
+        java.util.ArrayList<String> parentAppointments = new java.util.ArrayList<>();
+        for (String ancestorId : ancestors) {
+            try (Cursor c = db.query("appointments", new String[]{"id"},
+                    "deleted=0 AND organization_id=? AND position_code=? COLLATE NOCASE AND status='Current' AND id<>?",
+                    new String[]{ancestorId, code.trim(), appointmentId}, null, null, null)) {
+                while (c.moveToNext()) parentAppointments.add(c.getString(0));
+            }
+            if (!parentAppointments.isEmpty()) break; // nearest ancestor level with a matching head
+        }
+
+        db.beginTransaction();
+        try {
+            retireAutomaticReporting(db, appointmentId, now);
+            for (String parentId : parentAppointments) {
+                ContentValues edge = new ContentValues();
+                edge.put("id", UUID.randomUUID().toString());
+                edge.put("appointment_id", appointmentId);
+                edge.put("reports_to_appointment_id", parentId);
+                edge.put("relationship_type", "AUTO_ORG_PARENT");
+                edge.put("start_date", startDate == null ? "" : startDate);
+                edge.put("end_date", endDate == null ? "" : endDate);
+                edge.put("status", "Current");
+                edge.put("created_at", now);
+                edge.put("updated_at", now);
+                edge.put("deleted", 0);
+                edge.put("sync_state", "LOCAL_ONLY");
+                db.insertWithOnConflict("appointment_reporting", null, edge, SQLiteDatabase.CONFLICT_IGNORE);
+            }
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+        return parentAppointments.size();
+    }
+
+    private void retireAutomaticReporting(SQLiteDatabase db, String appointmentId, long now) {
+        ContentValues retired = new ContentValues();
+        retired.put("status", "Completed");
+        retired.put("deleted", 1);
+        retired.put("updated_at", now);
+        db.update("appointment_reporting", retired,
+                "appointment_id=? AND relationship_type='AUTO_ORG_PARENT' AND deleted=0",
+                new String[]{appointmentId});
+    }
+
     public void closeCurrentAppointments(String personName, String role, String organizationId, String newStartDate) {
         SQLiteDatabase db = getWritableDatabase();
         java.util.ArrayList<String> ids = new java.util.ArrayList<>();
