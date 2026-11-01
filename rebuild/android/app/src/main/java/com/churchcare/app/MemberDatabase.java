@@ -611,6 +611,27 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         return id;
     }
 
+    /** Current appointments held by a person, including their organisational context. */
+    public Cursor listPersonAppointments(String personId) {
+        return getReadableDatabase().rawQuery(
+            "SELECT a.id,a.role,COALESCE(o.name,'Unassigned') AS organization_name,a.status " +
+            "FROM appointments a LEFT JOIN organizations o ON o.id=a.organization_id " +
+            "WHERE a.person_id=? AND a.deleted=0 AND a.status='Current' " +
+            "ORDER BY a.role COLLATE NOCASE,o.name COLLATE NOCASE",
+            new String[]{personId});
+    }
+
+    /** An appointment endpoint must be current and belong to the person at that endpoint. */
+    private void validateRelationshipAppointment(SQLiteDatabase db, String personId, String appointmentId, String endpoint) {
+        if (appointmentId == null || appointmentId.trim().isEmpty()) return;
+        try (Cursor c = db.rawQuery(
+                "SELECT COUNT(*) FROM appointments WHERE id=? AND person_id=? AND deleted=0 AND status='Current'",
+                new String[]{appointmentId.trim(), personId})) {
+            if (!c.moveToFirst() || c.getInt(0) != 1)
+                throw new IllegalArgumentException("The selected " + endpoint + " appointment must be current and belong to that person.");
+        }
+    }
+
     /** Add a proposed relationship. It never creates membership or grants record access. */
     public String proposePersonRelationship(String sourcePersonId, String targetPersonId,
             String sourceAppointmentId, String targetAppointmentId, String relationshipType,
@@ -629,10 +650,12 @@ public final class MemberDatabase extends SQLiteOpenHelper {
                 if (!c.moveToFirst() || c.getInt(0) != 2)
                     throw new IllegalArgumentException("Both people must exist in the people directory.");
             }
+            validateRelationshipAppointment(db, sourcePersonId, sourceAppointmentId, "source");
+            validateRelationshipAppointment(db, targetPersonId, targetAppointmentId, "target");
             ContentValues link = new ContentValues();
             link.put("id", id); link.put("source_person_id", sourcePersonId); link.put("target_person_id", targetPersonId);
-            if (sourceAppointmentId != null && !sourceAppointmentId.trim().isEmpty()) link.put("source_appointment_id", sourceAppointmentId);
-            if (targetAppointmentId != null && !targetAppointmentId.trim().isEmpty()) link.put("target_appointment_id", targetAppointmentId);
+            if (sourceAppointmentId != null && !sourceAppointmentId.trim().isEmpty()) link.put("source_appointment_id", sourceAppointmentId.trim());
+            if (targetAppointmentId != null && !targetAppointmentId.trim().isEmpty()) link.put("target_appointment_id", targetAppointmentId.trim());
             link.put("relationship_type", type); link.put("relationship_label", relationshipLabel == null ? "" : relationshipLabel.trim());
             link.put("direction", "COLLEAGUE".equalsIgnoreCase(type) ? "BIDIRECTIONAL" : "SOURCE_TO_TARGET");
             if (scopeOrganizationId != null && !scopeOrganizationId.trim().isEmpty()) link.put("scope_organization_id", scopeOrganizationId);
@@ -651,14 +674,20 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         return getReadableDatabase().rawQuery(
             "SELECT r.id,r.source_person_id,r.target_person_id,r.source_appointment_id,r.target_appointment_id," +
             "r.relationship_type,r.relationship_label,r.direction,r.status,r.scope_organization_id," +
-            "s.full_name AS source_name,t.full_name AS target_name,r.created_at AS sort_time " +
+            "s.full_name AS source_name,t.full_name AS target_name,r.created_at AS sort_time," +
+            "COALESCE(sa.role,'') AS source_appointment_role,COALESCE(so.name,'') AS source_organization_name," +
+            "COALESCE(ta.role,'') AS target_appointment_role,COALESCE(to2.name,'') AS target_organization_name " +
             "FROM person_relationships r JOIN people s ON s.id=r.source_person_id " +
             "JOIN people t ON t.id=r.target_person_id " +
+            "LEFT JOIN appointments sa ON sa.id=r.source_appointment_id " +
+            "LEFT JOIN organizations so ON so.id=sa.organization_id " +
+            "LEFT JOIN appointments ta ON ta.id=r.target_appointment_id " +
+            "LEFT JOIN organizations to2 ON to2.id=ta.organization_id " +
             "WHERE (r.source_person_id=? OR r.target_person_id=?) AND r.deleted=0 " +
             "UNION ALL " +
             "SELECT mc.id,m.person_id,NULL,NULL,mc.appointment_id,mc.connection_type," +
             "'Legacy connection awaiting a unique person match','SOURCE_TO_TARGET',a.organization_id," +
-            "'LEGACY_UNRESOLVED',p.full_name,a.person_name,mc.created_at " +
+            "'LEGACY_UNRESOLVED',p.full_name,a.person_name,mc.created_at,'','','','' " +
             "FROM member_connections mc JOIN memberships m ON m.member_id=mc.member_id " +
             "JOIN people p ON p.id=m.person_id JOIN appointments a ON a.id=mc.appointment_id " +
             "WHERE m.person_id=? AND a.person_id IS NULL AND mc.deleted=0 " +
