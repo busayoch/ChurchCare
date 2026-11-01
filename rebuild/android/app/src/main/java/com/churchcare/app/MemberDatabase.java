@@ -106,6 +106,13 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         db.execSQL("INSERT OR IGNORE INTO memberships(id,person_id,member_id,organization_id,membership_type,status,start_date,end_date,created_at,updated_at,deleted,sync_state) SELECT 'legacy-membership-'||id,id,id,organization_id,'MEMBER',status,'','',created_at,updated_at,deleted,sync_state FROM members");
         // Link appointments only when an exact-name match resolves to one unique person.
         db.execSQL("UPDATE appointments SET person_id=(SELECT MIN(p.id) FROM people p WHERE p.full_name=appointments.person_name COLLATE NOCASE) WHERE person_id IS NULL AND (SELECT COUNT(*) FROM people p WHERE p.full_name=appointments.person_name COLLATE NOCASE)=1");
+        // Preserve legacy member-to-leader links in the new relationship view.
+        // These are marked LEGACY_RECORDED, not ACCEPTED: the old model did not
+        // capture independent recipient confirmation.
+        db.execSQL("INSERT OR IGNORE INTO person_relationships(id,source_person_id,target_person_id,target_appointment_id,relationship_type,relationship_label,direction,scope_organization_id,status,start_date,end_date,initiated_by_uid,created_at,updated_at,deleted,sync_state) " +
+            "SELECT 'legacy-member-connection-'||mc.id,mc.member_id,a.person_id,mc.appointment_id,mc.connection_type,'Migrated from the previous People & connections register','SOURCE_TO_TARGET',a.organization_id,'LEGACY_RECORDED','','',mc.created_by_uid,mc.created_at,mc.updated_at,mc.deleted,'LOCAL_ONLY' " +
+            "FROM member_connections mc JOIN people p ON p.id=mc.member_id JOIN appointments a ON a.id=mc.appointment_id " +
+            "WHERE mc.deleted=0 AND a.person_id IS NOT NULL AND mc.member_id<>a.person_id");
     }
 
     private void createConfigurationSuggestionsTable(SQLiteDatabase db) {
