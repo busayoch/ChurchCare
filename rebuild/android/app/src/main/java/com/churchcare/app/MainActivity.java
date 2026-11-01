@@ -85,6 +85,8 @@ public final class MainActivity extends Activity {
     private EditText memberEmailInput;
     private EditText memberAddressInput;
     private TextView memberPhotoStatus;
+    private ImageView memberPhotoPreview;
+    private Button removeMemberPhotoButton;
     private String pendingMemberPhotoPath = "";
     private static final int EXPORT_BACKUP = 7105;
     private static final int IMPORT_BACKUP = 7106;
@@ -843,8 +845,32 @@ public final class MainActivity extends Activity {
         phone.setInputType(PHONE); form.addView(phone);
         EditText email=new EditText(this); memberEmailInput=email; email.setSingleLine(true); email.setHint("Email address (optional)");
         email.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS); form.addView(email);
+        LinearLayout photoSection=new LinearLayout(this); photoSection.setOrientation(LinearLayout.HORIZONTAL);
+        photoSection.setGravity(Gravity.CENTER_VERTICAL); photoSection.setPadding(0,dp(10),0,dp(10));
+        ImageView photoPreview=new ImageView(this); memberPhotoPreview=photoPreview;
+        photoPreview.setImageResource(android.R.drawable.ic_menu_camera);
+        photoPreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        photoPreview.setBackgroundColor(0xFFE8EEF3);
+        LinearLayout.LayoutParams photoSize=new LinearLayout.LayoutParams(dp(88),dp(88));
+        photoSection.addView(photoPreview,photoSize);
+        LinearLayout photoActions=new LinearLayout(this); photoActions.setOrientation(LinearLayout.VERTICAL);
+        photoActions.setPadding(dp(12),0,0,0);
         TextView photoStatus=new TextView(this); memberPhotoStatus=photoStatus;
-        photoStatus.setText("No contact photo selected"); photoStatus.setTextColor(muted); photoStatus.setTextSize(12); form.addView(photoStatus);
+        photoStatus.setText("No photo selected"); photoStatus.setTextColor(muted); photoStatus.setTextSize(12);
+        photoActions.addView(photoStatus);
+        Button choosePhoto=new Button(this); choosePhoto.setAllCaps(false); choosePhoto.setText("Choose from gallery");
+        choosePhoto.setOnClickListener(v->{
+            Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT); pick.addCategory(Intent.CATEGORY_OPENABLE);
+            pick.setType("image/*"); pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivityForResult(pick,PICK_MEMBER_PHOTO);
+        });
+        photoActions.addView(choosePhoto);
+        Button removePhoto=new Button(this); removeMemberPhotoButton=removePhoto;
+        removePhoto.setAllCaps(false); removePhoto.setText("Remove photo"); removePhoto.setVisibility(View.GONE);
+        removePhoto.setOnClickListener(v->{pendingMemberPhotoPath=""; updateMemberPhotoPreview("No photo selected");});
+        photoActions.addView(removePhoto);
+        photoSection.addView(photoActions,new LinearLayout.LayoutParams(0,-2,1));
+        form.addView(photoSection);
 
         TextView connectionTitle=new TextView(this); connectionTitle.setText("2. Church connection");
         connectionTitle.setTextSize(17); connectionTitle.setTypeface(null,1); connectionTitle.setTextColor(ink);
@@ -895,6 +921,37 @@ public final class MainActivity extends Activity {
         root.addView(save);
     }
 
+    private void updateMemberPhotoPreview(String status) {
+        if(memberPhotoPreview!=null) {
+            if(!pendingMemberPhotoPath.isEmpty()) {
+                Bitmap bitmap=BitmapFactory.decodeFile(pendingMemberPhotoPath);
+                if(bitmap!=null) memberPhotoPreview.setImageBitmap(bitmap);
+                else memberPhotoPreview.setImageResource(android.R.drawable.ic_menu_camera);
+            } else memberPhotoPreview.setImageResource(android.R.drawable.ic_menu_camera);
+        }
+        if(memberPhotoStatus!=null) memberPhotoStatus.setText(status);
+        if(removeMemberPhotoButton!=null) removeMemberPhotoButton.setVisibility(
+            pendingMemberPhotoPath.isEmpty()?View.GONE:View.VISIBLE);
+    }
+
+    private String saveSelectedMemberPhoto(Uri uri) throws Exception {
+        File directory=new File(getFilesDir(),"member-photos");
+        if(!directory.exists()&&!directory.mkdirs()) throw new java.io.IOException("Could not create the member photo folder.");
+        File target=new File(directory,"member_"+System.currentTimeMillis()+".img");
+        try(InputStream in=getContentResolver().openInputStream(uri);
+            OutputStream out=new FileOutputStream(target)) {
+            if(in==null) throw new java.io.IOException("Could not open the selected image.");
+            byte[] buffer=new byte[8192]; int count; long total=0;
+            while((count=in.read(buffer))!=-1) {
+                total+=count;
+                if(total>10L*1024L*1024L) throw new java.io.IOException("Choose an image smaller than 10 MB.");
+                out.write(buffer,0,count);
+            }
+            if(total==0) throw new java.io.IOException("The selected image is empty.");
+        } catch(Exception error) { target.delete(); throw error; }
+        return target.getAbsolutePath();
+    }
+
     private String saveContactPhoto(long contactId) {
         if(contactId<=0) return "";
         File directory=new File(getFilesDir(),"member-photos");
@@ -941,7 +998,7 @@ public final class MainActivity extends Activity {
         if(memberEmailInput!=null&&!email.isEmpty()) memberEmailInput.setText(email);
         if(memberAddressInput!=null&&!address.isEmpty()) memberAddressInput.setText(address);
         pendingMemberPhotoPath=saveContactPhoto(contactId);
-        if(memberPhotoStatus!=null) memberPhotoStatus.setText(pendingMemberPhotoPath.isEmpty()
+        updateMemberPhotoPreview(pendingMemberPhotoPath.isEmpty()
             ?"Contact details imported; no photo was available":"Contact photo imported and will be saved as the member thumbnail");
         Toast.makeText(this,"Contact details added to the member form",Toast.LENGTH_SHORT).show();
     }
@@ -2111,6 +2168,18 @@ public final class MainActivity extends Activity {
             } catch (Exception e) {
                 android.util.Log.e("ChurchCare", "Backup restore failed", e);
                 new AlertDialog.Builder(this).setTitle("Restore failed").setMessage("ChurchCare could not restore this file. Your current database should remain unchanged if validation or the restore transaction failed. Details: " + e.getClass().getSimpleName()).setPositiveButton("OK", null).show();
+            }
+            return;
+        }
+        if(resultCode==RESULT_OK && data!=null && data.getData()!=null && requestCode==PICK_MEMBER_PHOTO) {
+            try {
+                pendingMemberPhotoPath=saveSelectedMemberPhoto(data.getData());
+                updateMemberPhotoPreview("Photo selected and ready to save with this member");
+            } catch(Exception error) {
+                android.util.Log.e("ChurchCare","Selected member photo could not be saved",error);
+                new AlertDialog.Builder(this).setTitle("Photo not added")
+                    .setMessage(error.getMessage()==null?"ChurchCare could not use that image. Please choose another photo.":error.getMessage())
+                    .setPositiveButton("OK",null).show();
             }
             return;
         }
