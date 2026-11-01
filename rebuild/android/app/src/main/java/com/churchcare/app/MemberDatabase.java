@@ -453,6 +453,32 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             new String[]{appointmentId});
     }
 
+    /** Return true when adding child -> proposed parent would close a reporting cycle. */
+    public boolean wouldCreateReportingCycle(String appointmentId, String proposedParentId) {
+        if (appointmentId == null || proposedParentId == null) return true;
+        if (appointmentId.equals(proposedParentId)) return true;
+        java.util.ArrayList<String> pending = new java.util.ArrayList<>();
+        java.util.HashSet<String> visited = new java.util.HashSet<>();
+        pending.add(proposedParentId);
+        SQLiteDatabase db = getReadableDatabase();
+        int examined = 0;
+        while (!pending.isEmpty() && examined++ < 1000) {
+            String current = pending.remove(pending.size() - 1);
+            if (appointmentId.equals(current)) return true;
+            if (!visited.add(current)) continue;
+            try (Cursor c = db.query("appointment_reporting", new String[]{"reports_to_appointment_id"},
+                    "appointment_id=? AND deleted=0 AND status='Current'",
+                    new String[]{current}, null, null, null)) {
+                while (c.moveToNext()) {
+                    String next = c.getString(0);
+                    if (next != null && !next.isEmpty()) pending.add(next);
+                }
+            }
+        }
+        // Fail closed if the graph is unexpectedly large or traversal cannot be completed safely.
+        return examined >= 1000 && !pending.isEmpty();
+    }
+
     /** Create an explicit many-to-many reporting link without modifying automatic hierarchy links. */
     public void addExplicitReportingRelationship(String appointmentId, String reportsToId, String actorUid) {
         if (appointmentId == null || reportsToId == null || appointmentId.equals(reportsToId))
@@ -467,6 +493,8 @@ public final class MemberDatabase extends SQLiteOpenHelper {
                     new String[]{appointmentId,reportsToId})) {
                 if (!c.moveToFirst() || c.getInt(0)!=2) throw new IllegalArgumentException("Both appointments must be current.");
             }
+            if (wouldCreateReportingCycle(appointmentId, reportsToId))
+                throw new IllegalArgumentException("That reporting line would create a circular leadership chain.");
             String existingId=null, existingType=null;
             try (Cursor c=db.query("appointment_reporting",new String[]{"id","relationship_type"},
                     "appointment_id=? AND reports_to_appointment_id=?",new String[]{appointmentId,reportsToId},null,null,null,"1")) {
