@@ -1228,7 +1228,7 @@ public final class MainActivity extends Activity {
         TextView note=new TextView(this);note.setText("Saving a backup to Google Drive is a separate choice. Signing in or out does not delete the information saved on this phone.");
         note.setTextColor(muted);note.setTextSize(13);note.setPadding(dp(4),dp(14),dp(4),dp(14));content.addView(note);
         TextView churchHeading=new TextView(this);churchHeading.setText("Your church");churchHeading.setTextColor(blue);churchHeading.setTextSize(18);churchHeading.setTypeface(null,1);churchHeading.setPadding(0,dp(18),0,dp(4));content.addView(churchHeading);
-        TextView churchInfo=new TextView(this);churchInfo.setText(database.churchName()+"\\n"+database.localUnitName()+"\\n\\nYou can review and change the levels used in your church.");churchInfo.setTextColor(ink);churchInfo.setTextSize(15);churchInfo.setPadding(dp(12),dp(12),dp(12),dp(12));churchInfo.setBackgroundColor(0xFFFFFFFF);content.addView(churchInfo);
+        TextView churchInfo=new TextView(this);churchInfo.setText(database.churchName()+"\n"+database.localUnitName()+"\n\nYou can review and change the levels used in your church.");churchInfo.setTextColor(ink);churchInfo.setTextSize(15);churchInfo.setPadding(dp(12),dp(12),dp(12),dp(12));churchInfo.setBackgroundColor(0xFFFFFFFF);content.addView(churchInfo);
         Button structure=new Button(this);structure.setText("Edit church structure");structure.setAllCaps(false);structure.setOnClickListener(v->showChurchStructureEditor());content.addView(structure);
         Button backup=new Button(this);backup.setText("Back up or move my information");backup.setAllCaps(false);backup.setOnClickListener(v->showSync());content.addView(backup);
         Button about=new Button(this);about.setText("About ChurchCare");about.setAllCaps(false);about.setOnClickListener(v->showAbout());content.addView(about);
@@ -1243,7 +1243,7 @@ public final class MainActivity extends Activity {
         try {
             JSONArray saved=new JSONArray(database.churchStructureJson());
             StringBuilder value=new StringBuilder();
-            for(int i=0;i<saved.length();i++){if(value.length()>0)value.append("\\n");value.append(saved.optString(i));}
+            for(int i=0;i<saved.length();i++){if(value.length()>0)value.append("\n");value.append(saved.optString(i));}
             levels.setText(value.toString());
         } catch(Exception ignored) {}
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(220));lp.topMargin=dp(14);root.addView(levels,lp);
