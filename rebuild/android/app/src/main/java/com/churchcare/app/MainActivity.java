@@ -393,6 +393,7 @@ public final class MainActivity extends Activity {
         stats.addView(stat("Care cases",String.valueOf(openCare)),new LinearLayout.LayoutParams(0,-2,1));
         LinearLayout.LayoutParams stp=new LinearLayout.LayoutParams(-1,-2); stp.topMargin=dp(10); stp.bottomMargin=dp(8); root.addView(stats,stp);
         ScrollView scroll=new ScrollView(this); LinearLayout menu=new LinearLayout(this); menu.setOrientation(LinearLayout.VERTICAL);
+        menuButton(menu,"People & connections","Connect church members with pastors, Follow-up leaders and teams",this::showPeopleConnections);
         menuButton(menu,"Members","Register, search, update and review member records",()->showRecords("members"));
         menuButton(menu,"Church branches & units","Build and view your church structure at every level",()->showRecords("organizations"));
         menuButton(menu,"Appointments & transfers","Track roles and retain previous appointments",()->showRecords("appointments"));
@@ -405,6 +406,105 @@ public final class MainActivity extends Activity {
         scroll.addView(menu); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         TextView footer=new TextView(this); footer.setText("Offline ready • SQLite local database • Cloud sync not connected"); footer.setTextColor(muted); footer.setTextSize(12); footer.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(-1,-2); fp.topMargin=dp(8); root.addView(footer,fp);
+    }
+
+    /** Plain-language directory for connecting members with current church leaders. */
+    private void showPeopleConnections() {
+        base("People & connections","Choose a person to see who is connected to them");
+        TextView note=new TextView(this);
+        note.setText("People can be added and connected without ChurchCare accounts. A connection records a church relationship only; it does not grant access to private member or care records.");
+        note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(12),dp(10),dp(12),dp(10)); note.setBackgroundColor(0xFFFFFFFF);
+        root.addView(note);
+        Button addPerson=new Button(this); addPerson.setText("+ Add a person"); addPerson.setAllCaps(false);
+        addPerson.setOnClickListener(v->showForm("members",null,null)); root.addView(addPerson);
+        EditText search=new EditText(this); search.setSingleLine(true); search.setHint("Find someone by name or phone");
+        root.addView(search);
+        Button find=new Button(this); find.setText("Search people"); find.setAllCaps(false); root.addView(find);
+        ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        Runnable render=()->{
+            list.removeAllViews();
+            String q=search.getText().toString().trim();
+            try(Cursor c=q.isEmpty()?database.listMembers():database.searchMembers(q)) {
+                if(!c.moveToFirst()) {
+                    TextView empty=new TextView(this); empty.setText("No people found. Add someone to the church directory to get started.");
+                    empty.setTextColor(muted); empty.setPadding(dp(12),dp(18),dp(12),dp(18)); list.addView(empty); return;
+                }
+                do {
+                    String id=get(c,"id"), name=get(c,"full_name"), phone=get(c,"phone"), org=get(c,"organization");
+                    Button person=new Button(this); person.setAllCaps(false); person.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+                    person.setText(name+"\n"+join(phone,org)+"\nView connections");
+                    person.setOnClickListener(v->showMemberConnections(id,name));
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=dp(5); list.addView(person,lp);
+                } while(c.moveToNext());
+            }
+        };
+        find.setOnClickListener(v->render.run());
+        search.setOnEditorActionListener((v,action,event)->{render.run();return true;});
+        render.run();
+    }
+
+    private void showMemberConnections(String memberId,String memberName) {
+        base("People connected to",memberName);
+        TextView note=new TextView(this);
+        note.setText("Connect this person to the leaders responsible for their pastoral care, Follow-up or team. The same person may have more than one connection.");
+        note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(12),dp(10),dp(12),dp(10)); note.setBackgroundColor(0xFFFFFFFF);
+        root.addView(note);
+        Button add=new Button(this); add.setText("+ Add a connection"); add.setAllCaps(false);
+        add.setOnClickListener(v->chooseMemberConnection(memberId,memberName)); root.addView(add);
+        ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        try(Cursor c=database.listMemberConnections(memberId)) {
+            if(!c.moveToFirst()) {
+                TextView empty=new TextView(this); empty.setText("No connections recorded yet. Add the person's Pastor, Follow-up Leader, Team Leader or another church contact.");
+                empty.setTextColor(muted); empty.setPadding(dp(12),dp(18),dp(12),dp(18)); list.addView(empty);
+            } else do {
+                String id=get(c,"id"), type=get(c,"connection_type"), leader=get(c,"person_name");
+                String role=get(c,"role"), org=get(c,"organization_name");
+                Button item=new Button(this); item.setAllCaps(false); item.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+                item.setText(type+"\n"+leader+" — "+role+"\n"+org+"\nTap to remove this connection");
+                item.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Remove this connection?")
+                    .setMessage("This will remove only the relationship. Neither person's directory record nor the leadership appointment will be deleted.")
+                    .setNegativeButton("Keep",null).setPositiveButton("Remove",(d,w)->{
+                        FirebaseUser actor=FirebaseAuth.getInstance().getCurrentUser();
+                        try { database.removeMemberConnection(id,actor==null?null:actor.getUid()); showMemberConnections(memberId,memberName); }
+                        catch(Exception error){Toast.makeText(this,"Could not remove connection: "+error.getMessage(),Toast.LENGTH_LONG).show();}
+                    }).show());
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=dp(5); list.addView(item,lp);
+            } while(c.moveToNext());
+        }
+    }
+
+    private void chooseMemberConnection(String memberId,String memberName) {
+        java.util.ArrayList<String> labels=new java.util.ArrayList<>();
+        java.util.ArrayList<String> ids=new java.util.ArrayList<>();
+        try(Cursor c=database.listCurrentGovernanceAppointments()) {
+            while(c.moveToNext()) {
+                String id=get(c,"id");
+                ids.add(id); labels.add(get(c,"person_name")+" — "+get(c,"role")+" ("+get(c,"organization_name")+")");
+            }
+        }
+        if(ids.isEmpty()) {
+            new AlertDialog.Builder(this).setTitle("No current leaders yet")
+                .setMessage("Add current leadership appointments first. You can still keep people in the church directory without connecting them to a leader.")
+                .setPositiveButton("OK",null).show(); return;
+        }
+        new AlertDialog.Builder(this).setTitle("Choose the leader")
+            .setItems(labels.toArray(new String[0]),(dialog,which)->{
+                final String appointmentId=ids.get(which);
+                String[] types={"My Pastor","My Pastoral Delegate","My Follow-up Leader","My Team Leader","My Department Head","Other church connection"};
+                new AlertDialog.Builder(this).setTitle("How is this person connected?")
+                    .setItems(types,(d,w)->{
+                        FirebaseUser actor=FirebaseAuth.getInstance().getCurrentUser();
+                        try {
+                            database.addMemberConnection(memberId,appointmentId,types[w],actor==null?null:actor.getUid());
+                            Toast.makeText(this,"Connection saved on this device",Toast.LENGTH_SHORT).show();
+                            showMemberConnections(memberId,memberName);
+                        } catch(Exception error) {
+                            Toast.makeText(this,"Could not save connection: "+error.getMessage(),Toast.LENGTH_LONG).show();
+                        }
+                    }).setNegativeButton("Cancel",null).show();
+            }).setNegativeButton("Cancel",null).show();
     }
 
     /** Local governance workspace. These records do not grant cloud or individual-record permissions. */
