@@ -412,7 +412,7 @@ public final class MainActivity extends Activity {
     private void showPeopleConnections() {
         base("People & connections","Choose a person to see who is connected to them");
         TextView note=new TextView(this);
-        note.setText("People can be added and connected without ChurchCare accounts. A connection records a church relationship only; it does not grant access to private member or care records.");
+        note.setText("People can be added and connected without ChurchCare accounts. A connection records a church relationship only; it does not grant access to private member or care records. Area-based leader permissions are not yet enforced in this build, so this screen is not an access-control boundary.");
         note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(12),dp(10),dp(12),dp(10)); note.setBackgroundColor(0xFFFFFFFF);
         root.addView(note);
         Button addPerson=new Button(this); addPerson.setText("+ Add a person"); addPerson.setAllCaps(false);
