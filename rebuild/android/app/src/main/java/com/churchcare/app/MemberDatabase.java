@@ -575,6 +575,17 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         } finally { db.endTransaction(); }
     }
 
+    /** Independent people directory; includes people who are not parish members. */
+    public Cursor listPeople(String query) {
+        String q = query == null ? "" : query.trim();
+        if (q.isEmpty()) return getReadableDatabase().rawQuery(
+            "SELECT id,full_name,phone,email,identity_status FROM people WHERE deleted=0 ORDER BY full_name COLLATE NOCASE", null);
+        String like = "%" + q + "%";
+        return getReadableDatabase().rawQuery(
+            "SELECT id,full_name,phone,email,identity_status FROM people WHERE deleted=0 AND (full_name LIKE ? OR phone LIKE ? OR email LIKE ?) ORDER BY full_name COLLATE NOCASE",
+            new String[]{like,like,like});
+    }
+
     /** Create an independent person identity; this does not create parish membership or an app account. */
     public String addPersonIdentity(String fullName, String phone, String email) {
         String name = fullName == null ? "" : fullName.trim();
@@ -640,19 +651,15 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             new String[]{personId, personId});
     }
 
-    /** Record recipient acceptance; identity and authority are not transferred to the inviter. */
+    /**
+     * Acceptance must be performed by the independently authenticated recipient.
+     * This offline-only build has no secure recipient identity binding, so it must
+     * never mark a proposal accepted based only on a caller-supplied UID.
+     */
+    @Deprecated
     public void acceptPersonRelationship(String relationshipId, String acceptingUid) {
-        if (acceptingUid == null || acceptingUid.trim().isEmpty())
-            throw new IllegalArgumentException("The recipient must sign in to accept this connection.");
-        SQLiteDatabase db = getWritableDatabase();
-        long now = System.currentTimeMillis();
-        ContentValues values = new ContentValues();
-        values.put("status", "ACCEPTED"); values.put("accepted_by_uid", acceptingUid);
-        values.put("updated_at", now); values.put("sync_state", "LOCAL_ONLY");
-        int changed = db.update("person_relationships", values,
-            "id=? AND status='PROPOSED' AND deleted=0", new String[]{relationshipId});
-        if (changed == 0) throw new IllegalArgumentException("This proposed connection is no longer available.");
-        logChange(db, "person_relationship", relationshipId, "ACCEPT", now);
+        throw new UnsupportedOperationException(
+            "Recipient acceptance is unavailable until secure cross-device identity verification is implemented.");
     }
 
     /** Store a local invitation draft. No delivery or cross-device claim is implied. */
