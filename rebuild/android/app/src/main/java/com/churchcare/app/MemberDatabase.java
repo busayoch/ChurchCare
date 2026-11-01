@@ -411,6 +411,19 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         return parentAppointments.size();
     }
 
+    /** Re-evaluate every active Follow-up Head after an appointment changes. */
+    public int refreshAllAutomaticFollowUpReporting() {
+        java.util.ArrayList<String> ids = new java.util.ArrayList<>();
+        try (Cursor c = getReadableDatabase().query("appointments", new String[]{"id"},
+                "deleted=0 AND status='Current' AND position_code='HEAD_OF_FOLLOW_UP' COLLATE NOCASE",
+                null, null, null, null)) {
+            while (c.moveToNext()) ids.add(c.getString(0));
+        }
+        int links = 0;
+        for (String id : ids) links += refreshAutomaticFollowUpReporting(id);
+        return links;
+    }
+
     private void retireAutomaticReporting(SQLiteDatabase db, String appointmentId, long now) {
         ContentValues retired = new ContentValues();
         retired.put("status", "Completed");
