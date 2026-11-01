@@ -1,7 +1,26 @@
 # ChurchCare People, Organisation & Connections — Phase 2 Architecture
 
-**Status:** Approved design direction; implementation pending  
-**Date:** 2026-11-01  
+**Status:** Architecture approved; initial SQLite identity/relationship schema implemented; UI and invitation transport pending  
+**Date:** 2026-11-01
+
+## Implementation progress — first database milestone
+
+The Android local database has been advanced from schema version 7 to version 8 on the feature branch.
+
+Implemented in `MemberDatabase`:
+- Independent `people` identity table, separate from local membership.
+- `memberships` mapping that preserves the existing member register while linking each legacy member to a person identity.
+- Nullable `appointments.person_id` to associate an appointment with a person without requiring parish membership.
+- Typed `person_relationships` supporting source/target people, optional source/target appointments, relationship purpose, scope, proposed/accepted status and history.
+- `connection_invitations` local draft table, with explicit local-only status; it does not deliver invitations or create cross-device claims.
+- Additive version-7-to-8 migration that backfills existing members into people and membership records, and links appointments only where an exact name match is unique.
+- Backup export/restore inclusion for the new tables. Legacy backups are still accepted; after restore, people/membership mappings are rebuilt from restored member records.
+
+New local database methods provide independent person creation, proposed relationship creation, relationship listing and acceptance. These are data-layer foundations only; the existing People & connections screen has not yet been rebuilt to use them.
+
+**Not implemented yet:** recipient-facing invitation UI, secure cross-device invitation delivery, identity claiming/merging, complete multi-appointment user experience, scoped permission enforcement, or formal institutional verification. Firestore remains deny-all and no cloud sync has been enabled.
+
+
 **Repository:** busayoch/ChurchCare  
 **Related work:** PR #4 — Establish ChurchCare hierarchy and governance data foundation
 
