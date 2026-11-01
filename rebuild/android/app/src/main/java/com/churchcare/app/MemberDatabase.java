@@ -12,6 +12,7 @@ import org.json.JSONObject;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -304,6 +305,40 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
         return id;
+    }
+
+    /**
+     * Insert a reviewed spreadsheet batch atomically. Either every valid member is
+     * added and logged, or the transaction rolls back without a partial import.
+     */
+    public int insertMembersBatch(List<ContentValues> members) {
+        if (members == null || members.isEmpty()) return 0;
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        int inserted = 0;
+        try {
+            for (ContentValues source : members) {
+                ContentValues values = new ContentValues(source);
+                String name = values.getAsString("full_name");
+                if (name == null || name.trim().isEmpty())
+                    throw new IllegalArgumentException("Every imported member must have a full name.");
+                long now = System.currentTimeMillis();
+                String id = UUID.randomUUID().toString();
+                values.put("id", id);
+                values.put("full_name", name.trim());
+                values.put("created_at", now);
+                values.put("updated_at", now);
+                values.put("deleted", 0);
+                values.put("sync_state", "LOCAL_ONLY");
+                db.insertOrThrow("members", null, values);
+                logChange(db, "member", id, "CREATE", now);
+                inserted++;
+            }
+            db.setTransactionSuccessful();
+            return inserted;
+        } finally {
+            db.endTransaction();
+        }
     }
 
     public void updateMember(String id, String name, String phone, String organization, String address, String status) {
