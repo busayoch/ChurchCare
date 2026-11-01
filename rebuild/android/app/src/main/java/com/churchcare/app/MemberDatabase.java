@@ -627,7 +627,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             if (sourceAppointmentId != null && !sourceAppointmentId.trim().isEmpty()) link.put("source_appointment_id", sourceAppointmentId);
             if (targetAppointmentId != null && !targetAppointmentId.trim().isEmpty()) link.put("target_appointment_id", targetAppointmentId);
             link.put("relationship_type", type); link.put("relationship_label", relationshipLabel == null ? "" : relationshipLabel.trim());
-            link.put("direction", "SOURCE_TO_TARGET");
+            link.put("direction", "COLLEAGUE".equalsIgnoreCase(type) ? "BIDIRECTIONAL" : "SOURCE_TO_TARGET");
             if (scopeOrganizationId != null && !scopeOrganizationId.trim().isEmpty()) link.put("scope_organization_id", scopeOrganizationId);
             link.put("status", "PROPOSED"); link.put("start_date", ""); link.put("end_date", "");
             if (actorUid != null && !actorUid.trim().isEmpty()) link.put("initiated_by_uid", actorUid);
