@@ -720,6 +720,17 @@ public final class MainActivity extends Activity {
         return endpoint.equals("overseer")?"Responsible overseer is linked to a ChurchCare account.":"Delegate is linked to a ChurchCare account.";
     }
 
+    private void linkCurrentAccountToDelegation(Field[] fields,EditText[] inputs,String uidKey,String nameKey) {
+        FirebaseUser current=FirebaseAuth.getInstance().getCurrentUser();
+        if(current==null){Toast.makeText(this,"Please sign in from Settings / Account first.",Toast.LENGTH_LONG).show();return;}
+        for(int i=0;i<fields.length;i++) {
+            if(uidKey.equals(fields[i].key)) inputs[i].setText(current.getUid());
+            if(nameKey.equals(fields[i].key) && inputs[i].getText().toString().trim().isEmpty() && current.getDisplayName()!=null)
+                inputs[i].setText(current.getDisplayName());
+        }
+        Toast.makeText(this,"Your account has been linked to this role.",Toast.LENGTH_SHORT).show();
+    }
+
     private boolean isInternalGovernanceField(String key) {
         return "person_uid".equals(key) || "overseer_uid".equals(key) || "delegate_uid".equals(key)
             || "permissions_json".equals(key) || "position_code".equals(key);
@@ -893,20 +904,18 @@ public final class MainActivity extends Activity {
             LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(4); form.addView(e,p); inputs[i]=e;
         }
         if (table.equals("delegations")) {
+            Button useAsOverseer = new Button(this);
+            useAsOverseer.setText("Link my account as the responsible overseer");
+            useAsOverseer.setAllCaps(false);
+            useAsOverseer.setOnClickListener(v -> linkCurrentAccountToDelegation(fields,inputs,"overseer_uid","overseer"));
+            form.addView(useAsOverseer);
             Button useAsDelegate = new Button(this);
             useAsDelegate.setText("Link my account as the delegate");
             useAsDelegate.setAllCaps(false);
-            useAsDelegate.setOnClickListener(v -> {
-                FirebaseUser current=FirebaseAuth.getInstance().getCurrentUser();
-                if(current==null){Toast.makeText(this,"Please sign in from Settings / Account first.",Toast.LENGTH_LONG).show();return;}
-                for(int i=0;i<fields.length;i++){
-                    if("delegate_uid".equals(fields[i].key)) inputs[i].setText(current.getUid());
-                    if("delegate_name".equals(fields[i].key) && inputs[i].getText().toString().trim().isEmpty() && current.getDisplayName()!=null) inputs[i].setText(current.getDisplayName());
-                }
-            });
+            useAsDelegate.setOnClickListener(v -> linkCurrentAccountToDelegation(fields,inputs,"delegate_uid","delegate_name"));
             form.addView(useAsDelegate);
             TextView delegationIdentityNote=new TextView(this);
-            delegationIdentityNote.setText("Choose the person responsible and the person being entrusted. You can link this record to your own ChurchCare account using the button above. Recording a delegation does not automatically open private member or care records.");
+            delegationIdentityNote.setText("Use the relevant button only when you are the person named in that role. Recording a delegation does not automatically open private member or care records.");
             delegationIdentityNote.setTextColor(muted); delegationIdentityNote.setTextSize(12); form.addView(delegationIdentityNote);
         }
         if (table.equals("appointments")) {
@@ -938,6 +947,11 @@ public final class MainActivity extends Activity {
                     String value=inputs[i].getText().toString().trim();
                     if(fields[i].required && value.isEmpty()){Toast.makeText(this,"Please complete: "+fields[i].label,Toast.LENGTH_LONG).show();return;}
                     values.put(fields[i].key,value);
+                }
+                if (table.equals("appointments") && safe(values,"position_code").isEmpty()) {
+                    String roleName=safe(values,"role").trim().toLowerCase(Locale.ROOT);
+                    if (roleName.equals("head of follow-up") || roleName.equals("head of follow up"))
+                        values.put("position_code","HEAD_OF_FOLLOW_UP");
                 }
                 applyRelationships(table,values);
                 if (!applySelectedRelationshipIds(table, fields, inputs, values)) return;
