@@ -1,6 +1,6 @@
 # ChurchCare People, Organisation & Connections — Phase 2 Architecture
 
-**Status:** Architecture approved; SQLite v8 identity/relationship foundation, appointment-aware connections and manual legacy matching implemented; latest changes require Android build verification; device migration testing and secure invitation transport remain pending  
+**Status:** Architecture approved; SQLite v8 identity/relationship foundation, appointment-aware connections and manual legacy matching implemented; latest changes require Android build verification; fresh-install smoke testing, backup/restore round-trip verification and secure invitation transport remain pending  
 **Date:** 2026-11-01
 
 ## Implementation progress — first database milestone
@@ -26,7 +26,7 @@ Implemented in `MemberDatabase`:
 - The UI clearly describes proposals as local-only and does not claim recipient acceptance.
 - The local acceptance API now refuses to mark a relationship accepted based only on a caller-supplied UID.
 
-**Not implemented yet:** recipient-facing invitation acceptance, secure cross-device invitation delivery, identity claiming/merging, scoped permission enforcement, or formal institutional verification. Appointment-specific selection is now available in the connection proposal UI, and new appointments are linked to person identities. Full multi-appointment lifecycle and migration/backup testing remain pending. Firestore remains deny-all and no cloud sync has been enabled. Build #92 and appointment-aware build #96 passed debug and signed-release compilation, signature verification and artifact uploads. Manual legacy matching has been committed and is awaiting its own build verification.
+**Not implemented yet:** recipient-facing invitation acceptance, secure cross-device invitation delivery, identity claiming/merging, scoped permission enforcement, or formal institutional verification. Appointment-specific selection is now available in the connection proposal UI, and new appointments are linked to person identities. Full multi-appointment lifecycle and migration/backup testing remain pending. Firestore remains deny-all and no cloud sync has been enabled. Build #92 and appointment-aware build #96 passed debug and signed-release compilation, signature verification and artifact uploads. Manual legacy matching and consistent-snapshot backup hardening are committed and awaiting their own build verification.
 
 
 **Repository:** busayoch/ChurchCare  
@@ -203,3 +203,8 @@ The design is not complete until the implementation can support all of these:
 ## 14. Governing statement
 
 **ChurchCare is a multi-dimensional organisational relationship system.** People connect upwards, downwards and laterally according to real authority, responsibility and relevant working relationships. Those connections may cross organisational levels and departments. Membership, appointment, identity, relationship and permission remain distinct concepts.
+
+
+## Fresh-install and backup validation plan
+
+The initial ChurchCare deployment is a fresh install with no pre-existing church records. Validation must therefore start with an empty version-8 database and confirm that all schema tables and indexes are created without phantom people, memberships, appointments or relationships. Backup/restore round-trip tests should use clearly synthetic fixture records created for testing, restore into a clean database, and compare the restored records and relationships. Older backup compatibility should be exercised with synthetic legacy-format fixtures only; no user or church records are assumed to exist. Backup export now runs inside a SQLite read transaction so the exported tables represent one consistent snapshot, and restore rejects backups declaring a schema version newer than the installed app.
