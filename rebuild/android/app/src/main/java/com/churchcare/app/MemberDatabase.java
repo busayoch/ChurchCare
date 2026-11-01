@@ -651,11 +651,19 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         return getReadableDatabase().rawQuery(
             "SELECT r.id,r.source_person_id,r.target_person_id,r.source_appointment_id,r.target_appointment_id," +
             "r.relationship_type,r.relationship_label,r.direction,r.status,r.scope_organization_id," +
-            "s.full_name AS source_name,t.full_name AS target_name " +
+            "s.full_name AS source_name,t.full_name AS target_name,r.created_at AS sort_time " +
             "FROM person_relationships r JOIN people s ON s.id=r.source_person_id " +
             "JOIN people t ON t.id=r.target_person_id " +
-            "WHERE (r.source_person_id=? OR r.target_person_id=?) AND r.deleted=0 ORDER BY r.created_at DESC",
-            new String[]{personId, personId});
+            "WHERE (r.source_person_id=? OR r.target_person_id=?) AND r.deleted=0 " +
+            "UNION ALL " +
+            "SELECT mc.id,m.person_id,NULL,NULL,mc.appointment_id,mc.connection_type," +
+            "'Legacy connection awaiting a unique person match','SOURCE_TO_TARGET',a.organization_id," +
+            "'LEGACY_UNRESOLVED',p.full_name,a.person_name,mc.created_at " +
+            "FROM member_connections mc JOIN memberships m ON m.member_id=mc.member_id " +
+            "JOIN people p ON p.id=m.person_id JOIN appointments a ON a.id=mc.appointment_id " +
+            "WHERE m.person_id=? AND a.person_id IS NULL AND mc.deleted=0 " +
+            "ORDER BY sort_time DESC",
+            new String[]{personId, personId, personId});
     }
 
     /**
