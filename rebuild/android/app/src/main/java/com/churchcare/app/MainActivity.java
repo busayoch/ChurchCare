@@ -1481,6 +1481,53 @@ public final class MainActivity extends Activity {
         addProfileSection(page,"Church membership");
         addProfileValue(page,"Branch or group",safe(member,"organization"));
         addProfileValue(page,"Membership status",safe(member,"status"));
+        addProfileSection(page,"Visit history and follow-ups");
+        try (Cursor visits=database.listVisitsForMember(id)) {
+            if (!visits.moveToFirst()) {
+                TextView emptyVisits=new TextView(this);
+                emptyVisits.setText("No visits have been recorded for this member yet.");
+                emptyVisits.setTextColor(muted); emptyVisits.setPadding(dp(12),dp(8),dp(12),dp(8));
+                page.addView(emptyVisits);
+            } else {
+                do {
+                    String visitDate=get(visits,"visit_date");
+                    String nextDate=get(visits,"next_follow_up");
+                    String visitTitle="Visit • "+visitDate;
+                    String followUpLabel="";
+                    if(!nextDate.trim().isEmpty()) {
+                        followUpLabel="Follow-up: "+nextDate;
+                        if(nextDate.compareTo(today())<0) followUpLabel+=" • Overdue";
+                        else if(nextDate.equals(today())) followUpLabel+=" • Due today";
+                        else followUpLabel+=" • Upcoming";
+                    }
+                    TextView visitRow=new TextView(this);
+                    visitRow.setText(join(visitTitle,
+                        "Visitor: "+get(visits,"visitor"),
+                        "Outcome: "+get(visits,"outcome"),
+                        followUpLabel,
+                        get(visits,"notes")));
+                    visitRow.setTextColor(ink); visitRow.setTextSize(14);
+                    visitRow.setPadding(dp(12),dp(10),dp(12),dp(10));
+                    visitRow.setBackgroundColor(0xFFFFFFFF);
+                    LinearLayout.LayoutParams visitParams=new LinearLayout.LayoutParams(-1,-2);
+                    visitParams.bottomMargin=dp(4); page.addView(visitRow,visitParams);
+                    ContentValues visitSnapshot=new ContentValues();
+                    for(int i=0;i<visits.getColumnCount();i++)
+                        if(!visits.isNull(i)) visitSnapshot.put(visits.getColumnName(i),visits.getString(i));
+                    String visitId=get(visits,"id");
+                    visitRow.setOnClickListener(v->showRecordActions("visits",visitId,visitSnapshot));
+                } while(visits.moveToNext());
+            }
+        }
+        Button addVisitFromProfile=new Button(this);
+        addVisitFromProfile.setText("＋ Record another visit");
+        addVisitFromProfile.setAllCaps(false);
+        addVisitFromProfile.setOnClickListener(v->{
+            ContentValues preset=new ContentValues(); preset.put("member_name",safe(member,"full_name"));
+            preset.put("member_id",id); showForm("visits",null,preset);
+        });
+        page.addView(addVisitFromProfile);
+
         addProfileSection(page,"Profile photos");
         addProfileValue(page,"Additional photos",join(
             safe(member,"extra_photo_one_path").isEmpty()?"":"Additional photo 1 saved",
