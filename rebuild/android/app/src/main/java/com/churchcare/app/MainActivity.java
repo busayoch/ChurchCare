@@ -393,6 +393,7 @@ public final class MainActivity extends Activity {
         menuButton(menu,"Members","Register, search, update and review member records",()->showRecords("members"));
         menuButton(menu,"Church branches & units","Build and view your church structure at every level",()->showRecords("organizations"));
         menuButton(menu,"Appointments & transfers","Track roles and retain previous appointments",()->showRecords("appointments"));
+        menuButton(menu,"Leadership & governance","Manage reporting lines, pastoral delegates and team appointments",this::showGovernance);
         menuButton(menu,"Delegation & authority","Define who can act, for whom, and within what scope",()->showRecords("delegations"));
         menuButton(menu,"Visits & follow-ups","Record pastoral visits and next steps",()->showRecords("visits"));
         menuButton(menu,"Care cases & escalation","Track care needs, priorities, assignments and resolution",()->showRecords("care_records"));
@@ -401,6 +402,113 @@ public final class MainActivity extends Activity {
         scroll.addView(menu); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         TextView footer=new TextView(this); footer.setText("Offline ready • SQLite local database • Cloud sync not connected"); footer.setTextColor(muted); footer.setTextSize(12); footer.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(-1,-2); fp.topMargin=dp(8); root.addView(footer,fp);
+    }
+
+    /** Local governance workspace. These records do not grant cloud or individual-record permissions. */
+    private void showGovernance() {
+        base("Leadership & governance","Appointments, reporting relationships and delegated pastoral oversight");
+        TextView note=new TextView(this);
+        note.setText("Manage the church's leadership structure here. Reporting links are local governance records only; they do not grant access to member or care records, and cloud permissions remain disabled.");
+        note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(12),dp(10),dp(12),dp(10));
+        note.setBackgroundColor(0xFFFFFFFF); root.addView(note);
+        Button add=new Button(this); add.setText("+ Add leadership appointment"); add.setAllCaps(false);
+        add.setOnClickListener(v->showForm("appointments",null,null)); root.addView(add);
+        Button delegates=new Button(this); delegates.setText("Manage pastoral delegates"); delegates.setAllCaps(false);
+        delegates.setOnClickListener(v->showRecords("delegations")); root.addView(delegates);
+        ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        try(Cursor c=database.listCurrentGovernanceAppointments()) {
+            if(!c.moveToFirst()) {
+                TextView empty=new TextView(this); empty.setText("No current leadership appointments yet. Add an appointment to begin building the reporting structure.");
+                empty.setTextColor(muted); empty.setPadding(dp(12),dp(18),dp(12),dp(18)); list.addView(empty);
+            } else do {
+                String id=c.getString(c.getColumnIndexOrThrow("id"));
+                String person=c.getString(c.getColumnIndexOrThrow("person_name"));
+                String role=c.getString(c.getColumnIndexOrThrow("role"));
+                String org=c.getString(c.getColumnIndexOrThrow("organization_name"));
+                Button item=new Button(this); item.setAllCaps(false); item.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+                item.setText(person+" — "+role+"\n"+org+"\nTap to manage reporting");
+                item.setOnClickListener(v->showReportingManagement(id,person,role));
+                LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(5); list.addView(item,p);
+            } while(c.moveToNext());
+        }
+    }
+
+    private void showReportingManagement(String appointmentId,String personName,String role) {
+        base("Reporting relationships",personName+" • "+role);
+        TextView note=new TextView(this);
+        note.setText("A person may report to more than one appointment. Automatic organisation-level Follow-up links are maintained by the hierarchy and cannot be removed here. Additional pastoral links can be added separately.");
+        note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(10),dp(8),dp(10),dp(8)); root.addView(note);
+        Button add=new Button(this); add.setText("+ Add reporting relationship"); add.setAllCaps(false);
+        add.setOnClickListener(v->chooseReportingParent(appointmentId)); root.addView(add);
+        Button editAppointment=new Button(this); editAppointment.setText("Edit this appointment"); editAppointment.setAllCaps(false);
+        editAppointment.setOnClickListener(v->{
+            ContentValues snapshot=new ContentValues();
+            try(Cursor c=database.listRecords("appointments")) {
+                while(c.moveToNext()) if(appointmentId.equals(c.getString(c.getColumnIndexOrThrow("id")))) {
+                    for(int i=0;i<c.getColumnCount();i++) if(!c.isNull(i)) snapshot.put(c.getColumnName(i),c.getString(i));
+                    break;
+                }
+            }
+            if(snapshot.size()>0) showForm("appointments",appointmentId,snapshot);
+        }); root.addView(editAppointment);
+        ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        try(Cursor c=database.listReportingForAppointment(appointmentId)) {
+            if(!c.moveToFirst()) {
+                TextView empty=new TextView(this); empty.setText("No active reporting relationships recorded for this appointment.");
+                empty.setTextColor(muted); empty.setPadding(dp(12),dp(18),dp(12),dp(18)); list.addView(empty);
+            } else do {
+                String linkId=c.getString(c.getColumnIndexOrThrow("id"));
+                String type=c.getString(c.getColumnIndexOrThrow("relationship_type"));
+                String parent=c.getString(c.getColumnIndexOrThrow("person_name"));
+                String parentRole=c.getString(c.getColumnIndexOrThrow("role"));
+                String org=c.getString(c.getColumnIndexOrThrow("organization_name"));
+                Button link=new Button(this); link.setAllCaps(false); link.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+                link.setText(parent+" — "+parentRole+"\n"+org+" • "+("AUTO_ORG_PARENT".equals(type)?"Automatic hierarchy":"Additional reporting"));
+                if("DIRECT".equals(type)) link.setOnClickListener(v->new AlertDialog.Builder(this)
+                    .setTitle("Remove reporting relationship?")
+                    .setMessage("This retires only the additional reporting link. It does not delete either appointment.")
+                    .setNegativeButton("Keep",null)
+                    .setPositiveButton("Remove",(d,w)->{
+                        FirebaseUser actor=FirebaseAuth.getInstance().getCurrentUser();
+                        if(actor==null){Toast.makeText(this,"Sign in with Google before changing governance records.",Toast.LENGTH_LONG).show();return;}
+                        try { database.removeExplicitReportingRelationship(linkId,actor.getUid()); Toast.makeText(this,"Reporting link retired",Toast.LENGTH_SHORT).show(); showReportingManagement(appointmentId,personName,role); }
+                        catch(Exception error){Toast.makeText(this,"Could not remove the reporting link: "+error.getMessage(),Toast.LENGTH_LONG).show();}
+                    }).show());
+                else link.setEnabled(false);
+                LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(5); list.addView(link,p);
+            } while(c.moveToNext());
+        }
+    }
+
+    private void chooseReportingParent(String appointmentId) {
+        java.util.ArrayList<String> labels=new java.util.ArrayList<>();
+        java.util.ArrayList<String> ids=new java.util.ArrayList<>();
+        try(Cursor c=database.listCurrentGovernanceAppointments()) {
+            while(c.moveToNext()) {
+                String id=c.getString(c.getColumnIndexOrThrow("id"));
+                if(id.equals(appointmentId)) continue;
+                String person=c.getString(c.getColumnIndexOrThrow("person_name"));
+                String role=c.getString(c.getColumnIndexOrThrow("role"));
+                String org=c.getString(c.getColumnIndexOrThrow("organization_name"));
+                ids.add(id); labels.add(person+" — "+role+" ("+org+")");
+            }
+        }
+        if(ids.isEmpty()){Toast.makeText(this,"Add another current leadership appointment first.",Toast.LENGTH_LONG).show();return;}
+        new AlertDialog.Builder(this).setTitle("Choose who this appointment reports to")
+            .setItems(labels.toArray(new String[0]),(dialog,which)->{
+                FirebaseUser actor=FirebaseAuth.getInstance().getCurrentUser();
+                if(actor==null){Toast.makeText(this,"Sign in with Google before recording a reporting relationship.",Toast.LENGTH_LONG).show();return;}
+                try {
+                    database.addExplicitReportingRelationship(appointmentId,ids.get(which),actor.getUid());
+                    Toast.makeText(this,"Reporting relationship saved on this device",Toast.LENGTH_LONG).show();
+                    showGovernance();
+                } catch(Exception error) {
+                    Toast.makeText(this,"Could not save relationship: "+error.getMessage(),Toast.LENGTH_LONG).show();
+                    showReportingManagement(appointmentId,"Leadership appointment", "Reporting");
+                }
+            }).setNegativeButton("Cancel",null).show();
     }
 
     private View stat(String label,String value) {
