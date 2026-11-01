@@ -211,200 +211,96 @@ public final class MainActivity extends Activity {
     }
 
     private void showChurchSetup() {
-        loadChurchTemplateOptions();
-        base("Create your church profile", "Choose your church, define its structure and name your starting branch or unit");
-
+        base("Welcome to ChurchCare", "Let's get your church ready. You can add more details whenever you need them.");
         ScrollView scroll = new ScrollView(this);
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(4),dp(4),dp(4),dp(12));
         scroll.addView(form);
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
         TextView intro=new TextView(this);
-        intro.setText("A church can start using ChurchCare at any level. Its other levels and branches can join later without changing this church's identity.");
-        intro.setTextColor(ink); intro.setTextSize(15); intro.setPadding(dp(12),dp(10),dp(12),dp(12)); form.addView(intro);
+        intro.setText("Start with just two things: your church name and the local congregation or branch you are setting up. You do not need to enter the whole church structure now. You can add other branches and levels later.");
+        intro.setTextColor(ink); intro.setTextSize(16); intro.setPadding(dp(14),dp(14),dp(14),dp(18));
+        intro.setBackgroundColor(0xFFFFFFFF); form.addView(intro);
 
-        TextView churchLabel=new TextView(this); churchLabel.setText("1. Pick your church"); churchLabel.setTextColor(blue); churchLabel.setTextSize(15); churchLabel.setTypeface(null,1); form.addView(churchLabel);
-        Spinner templates=new Spinner(this);
-        templates.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,setupTemplateNames));
-        form.addView(templates);
+        TextView churchLabel=new TextView(this); churchLabel.setText("What is your church called?"); churchLabel.setTextColor(blue); churchLabel.setTextSize(16); churchLabel.setTypeface(null,1); form.addView(churchLabel);
+        EditText churchName=new EditText(this); churchName.setSingleLine(true); churchName.setHint("Enter your church name"); form.addView(churchName);
 
-        EditText customChurch=new EditText(this); customChurch.setSingleLine(true); customChurch.setHint("Enter your church's name");
-        customChurch.setVisibility(View.GONE); form.addView(customChurch);
+        TextView unitLabel=new TextView(this); unitLabel.setText("What is the name of your local church or branch?"); unitLabel.setTextColor(blue); unitLabel.setTextSize(16); unitLabel.setTypeface(null,1);
+        LinearLayout.LayoutParams ulp=new LinearLayout.LayoutParams(-1,-2); ulp.topMargin=dp(18); form.addView(unitLabel,ulp);
+        EditText unitName=new EditText(this); unitName.setSingleLine(true); unitName.setHint("For example, your parish or assembly"); form.addView(unitName);
 
-        TextView levelLabel=new TextView(this); levelLabel.setText("2. Define your church's structure (highest level first)"); levelLabel.setTextColor(blue); levelLabel.setTextSize(15); levelLabel.setTypeface(null,1);
-        LinearLayout.LayoutParams llp=new LinearLayout.LayoutParams(-1,-2); llp.topMargin=dp(12); form.addView(levelLabel,llp);
-        TextView structureHelp=new TextView(this); structureHelp.setTextColor(muted); structureHelp.setTextSize(12);
-        structureHelp.setText("Add each organisational level in order, from the highest level down to the local congregation or unit. These are levels, not leadership titles.");
-        form.addView(structureHelp);
-        LinearLayout levelRows=new LinearLayout(this); levelRows.setOrientation(LinearLayout.VERTICAL); form.addView(levelRows);
-        Button addLevel=new Button(this); addLevel.setText("＋ Add another level"); addLevel.setAllCaps(false); form.addView(addLevel);
-        TextView startingLevelLabel=new TextView(this); startingLevelLabel.setText("Pick your church level"); startingLevelLabel.setTextColor(blue); startingLevelLabel.setTypeface(null,1); form.addView(startingLevelLabel);
-        RadioGroup levelRadioGroup=new RadioGroup(this); levelRadioGroup.setOrientation(LinearLayout.VERTICAL); form.addView(levelRadioGroup);
-
-        EditText customLevel=new EditText(this); customLevel.setSingleLine(true); customLevel.setHint("Enter a level name");
-        customLevel.setVisibility(View.GONE); form.addView(customLevel);
-
-        TextView unitLabel=new TextView(this); unitLabel.setText("3. Name the branch or unit being registered"); unitLabel.setTextColor(blue); unitLabel.setTextSize(15); unitLabel.setTypeface(null,1);
-        LinearLayout.LayoutParams ulp=new LinearLayout.LayoutParams(-1,-2); ulp.topMargin=dp(12); form.addView(unitLabel,ulp);
-        EditText unit=new EditText(this); unit.setSingleLine(true); unit.setHint("e.g. Charity Assembly"); form.addView(unit);
-
-        final String otherChoice="Other — enter a level";
-        final java.util.ArrayList<EditText> customLevelFields=new java.util.ArrayList<>();
-        final boolean[] customMode={true};
-
-        Runnable refreshCustomLevels=()->{
-            java.util.ArrayList<String> names=new java.util.ArrayList<>();
-            for(EditText field:customLevelFields) {
-                String value=field.getText().toString().trim();
-                if(!value.isEmpty()) names.add(value);
-            }
-            String previouslySelected=levelRadioGroup.getCheckedRadioButtonId()==View.NO_ID?"":String.valueOf(((RadioButton)findViewById(levelRadioGroup.getCheckedRadioButtonId())).getText());
-            levelRadioGroup.removeAllViews();
-            for(String name:names) {
-                RadioButton option=new RadioButton(MainActivity.this);
-                option.setId(View.generateViewId());
-                option.setText(name);
-                option.setTextColor(ink);
-                option.setTextSize(15);
-                option.setPadding(dp(4),dp(5),dp(4),dp(5));
-                levelRadioGroup.addView(option);
-                if(name.equals(previouslySelected)) option.setChecked(true);
-            }
-            if(levelRadioGroup.getCheckedRadioButtonId()==View.NO_ID && !names.isEmpty())
-                ((RadioButton)levelRadioGroup.getChildAt(0)).setChecked(true);
-        };
-
-        SetupLevelAdder addCustomLevel=(initial)->{
-            LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL);
-            EditText field=new EditText(this); field.setSingleLine(true); field.setHint("Level name (e.g. District)");
-            field.setText(initial==null?"":initial);
-            row.addView(field,new LinearLayout.LayoutParams(0,-2,1));
-            Button up=new Button(this); up.setText("↑"); up.setAllCaps(false);
-            Button down=new Button(this); down.setText("↓"); down.setAllCaps(false);
-            Button remove=new Button(this); remove.setText("×"); remove.setAllCaps(false);
-            row.addView(up); row.addView(down); row.addView(remove);
-            int index=customLevelFields.size(); customLevelFields.add(field); levelRows.addView(row);
-            field.addTextChangedListener(new android.text.TextWatcher() {
-                public void beforeTextChanged(CharSequence s,int st,int count,int after) {}
-                public void onTextChanged(CharSequence s,int st,int before,int count) { refreshCustomLevels.run(); }
-                public void afterTextChanged(android.text.Editable e) {}
-            });
-            up.setOnClickListener(v->{
-                int at=customLevelFields.indexOf(field); if(at<=0)return;
-                EditText previous=customLevelFields.get(at-1);
-                String a=field.getText().toString(), b=previous.getText().toString();
-                field.setText(b); previous.setText(a);
-            });
-            down.setOnClickListener(v->{
-                int at=customLevelFields.indexOf(field); if(at<0||at>=customLevelFields.size()-1)return;
-                EditText next=customLevelFields.get(at+1);
-                String a=field.getText().toString(), b=next.getText().toString();
-                field.setText(b); next.setText(a);
-            });
-            remove.setOnClickListener(v->{
-                if(customLevelFields.size()<=1) { field.setText(""); return; }
-                customLevelFields.remove(field); levelRows.removeView(row); refreshCustomLevels.run();
-            });
-            refreshCustomLevels.run();
-        };
-
-        addLevel.setOnClickListener(v->addCustomLevel.add(""));
-        addCustomLevel.add("");
-
-        templates.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> p,View v,int position,long id) {
-                boolean addingChurch=position==0;
-                customChurch.setVisibility(addingChurch?View.VISIBLE:View.GONE);
-                customMode[0]=addingChurch;
-                levelRows.removeAllViews(); customLevelFields.clear();
-                if(addingChurch) {
-                    addCustomLevel.add("");
-                    addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
-                    structureHelp.setText("For a church you add yourself, enter every level from highest to lowest. Use the arrows to change the order and × to remove a level.");
-                    startingLevelLabel.setText("Pick your church level");
-                    levelRadioGroup.setVisibility(View.VISIBLE); customLevel.setVisibility(View.GONE);
-                } else {
-                    String[] known=setupTemplateLevels[position];
-                    String[] choices=setupTemplateLevelChoices[position];
-                    if(known.length>0) {
-                        for(String name:known) addCustomLevel.add(name);
-                        addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
-                        structureHelp.setText("This is a suggested starting structure for the selected church. You can rename, add, remove or reorder levels for its local configuration.");
-                        startingLevelLabel.setText("Pick your church level");
-                        customLevel.setVisibility(View.GONE);
-                    } else {
-                        addCustomLevel.add("");
-                        addLevel.setVisibility(View.VISIBLE); levelRows.setVisibility(View.VISIBLE);
-                        structureHelp.setText("The catalogue does not confirm a complete order for this church. Define the actual order used by your congregation; suggested names are available in the catalogue notes.");
-                        startingLevelLabel.setText("Pick your church level");
-                        customLevel.setVisibility(View.GONE);
-                    }
-                }
-            }
-            @Override public void onNothingSelected(AdapterView<?> p) {}
+        TextView levelLabel=new TextView(this); levelLabel.setText("What do you call this local church?"); levelLabel.setTextColor(blue); levelLabel.setTextSize(16); levelLabel.setTypeface(null,1);
+        LinearLayout.LayoutParams llp=new LinearLayout.LayoutParams(-1,-2); llp.topMargin=dp(18); form.addView(levelLabel,llp);
+        String[] levelChoices={"Congregation","Parish","Assembly","Branch","Fellowship","Other"};
+        Spinner levelPicker=new Spinner(this);
+        levelPicker.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,levelChoices));
+        form.addView(levelPicker);
+        EditText otherLevel=new EditText(this); otherLevel.setSingleLine(true); otherLevel.setHint("Enter the name your church uses");
+        otherLevel.setVisibility(View.GONE); form.addView(otherLevel);
+        levelPicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+            @Override public void onItemSelected(AdapterView<?> parent,View view,int position,long id){otherLevel.setVisibility(position==levelChoices.length-1?View.VISIBLE:View.GONE);}
+            @Override public void onNothingSelected(AdapterView<?> parent){}
         });
 
-        Button create=new Button(this); create.setText("Review and create ChurchCare profile"); create.setAllCaps(false); form.addView(create);
-        create.setOnClickListener(v -> {
-            int pos=templates.getSelectedItemPosition();
-            boolean addingChurch=pos==0;
-            String churchName=addingChurch?customChurch.getText().toString().trim():setupTemplateNames[pos];
-            String unitName=unit.getText().toString().trim();
-            JSONArray structure=new JSONArray();
-            java.util.ArrayList<String> ordered=new java.util.ArrayList<>();
-            java.util.HashSet<String> unique=new java.util.HashSet<>();
-            for(EditText field:customLevelFields) {
-                String name=field.getText().toString().trim();
-                if(name.isEmpty()) continue;
-                if(!unique.add(name.toLowerCase(Locale.ROOT))) {
-                    Toast.makeText(this,"Each church structure level must have a distinct name.",Toast.LENGTH_LONG).show(); return;
-                }
-                ordered.add(name); structure.put(name);
-            }
-            int selectedLevelId=levelRadioGroup.getCheckedRadioButtonId();
-            String startingLevel=selectedLevelId==View.NO_ID?"":String.valueOf(((RadioButton)findViewById(selectedLevelId)).getText());
-            if(churchName.isEmpty()||unitName.isEmpty()||ordered.isEmpty()||startingLevel.isEmpty()) {
-                Toast.makeText(this,"Enter the church name, define at least one level, select the starting level and name the branch/unit.",Toast.LENGTH_LONG).show(); return;
-            }
-            if(!ordered.contains(startingLevel)) {
-                Toast.makeText(this,"Select a starting level from the structure you defined.",Toast.LENGTH_LONG).show(); return;
-            }
-            String templateId=addingChurch?"custom":setupTemplateIds[pos];
-            int templateVersion=addingChurch?0:setupTemplateVersions[pos];
-            StringBuilder structureText=new StringBuilder();
-            for(int i=0;i<ordered.size();i++) structureText.append(i+1).append(". ").append(ordered.get(i)).append("\n");
-            new AlertDialog.Builder(this).setTitle("Review your church profile")
-                .setMessage("Church: "+churchName+"\n\nChurch structure (highest to lowest):\n"+structureText+"\nStarting level: "+startingLevel+"\nBranch / unit: "+unitName+"\n\nThis branch can begin independently. Other levels of the same church can join later, and this setup does not connect it to a different church.")
-                .setNegativeButton("Edit",null).setPositiveButton("Confirm",(dialog,which)->{
-                    try { database.saveChurchSetup(churchName,unitName,startingLevel,templateId,structure.toString(),templateVersion); showHome(); }
-                    catch(Exception e) { android.util.Log.e("ChurchCare","Setup failed",e); Toast.makeText(this,"Could not save setup. Please try again.",Toast.LENGTH_LONG).show(); }
+        TextView reassurance=new TextView(this);
+        reassurance.setText("Your information is saved on this phone. You can begin with this one location and build the rest of your church directory step by step.");
+        reassurance.setTextColor(muted); reassurance.setTextSize(13); reassurance.setPadding(dp(4),dp(18),dp(4),dp(12)); form.addView(reassurance);
+
+        Button create=new Button(this); create.setText("Get started"); create.setAllCaps(false); form.addView(create);
+        create.setOnClickListener(v->{
+            String church=churchName.getText().toString().trim();
+            String unit=unitName.getText().toString().trim();
+            int selected=levelPicker.getSelectedItemPosition();
+            String level=selected==levelChoices.length-1?otherLevel.getText().toString().trim():levelChoices[selected];
+            if(church.isEmpty()){churchName.setError("Enter your church name");churchName.requestFocus();return;}
+            if(unit.isEmpty()){unitName.setError("Enter the name of your local church or branch");unitName.requestFocus();return;}
+            if(level.isEmpty()){otherLevel.setError("Enter the name used by your church");otherLevel.requestFocus();return;}
+            JSONArray structure=new JSONArray(); structure.put("Church"); structure.put(level);
+            new AlertDialog.Builder(this).setTitle("Ready to begin?")
+                .setMessage("Church: "+church+"\nLocal church or branch: "+unit+"\nType: "+level+"\n\nYou can add other branches and church levels later. Nothing else is required to get started.")
+                .setNegativeButton("Go back",null).setPositiveButton("Create my church",(dialog,which)->{
+                    try { database.saveChurchSetup(church,unit,level,"custom",structure.toString(),0); showHome(); }
+                    catch(Exception error){android.util.Log.e("ChurchCare","Setup failed",error);Toast.makeText(this,"We could not save your church details. Please try again.",Toast.LENGTH_LONG).show();}
                 }).show();
         });
     }
 
     private void showHome() {
         base("ChurchCare", database.churchName() + " • " + database.localUnitName());
-        int members=database.count("members"), orgs=database.count("organizations"), openCare=database.count("care_records"), pending=database.pendingChanges();
-        TextView welcome = new TextView(this); welcome.setText("Your records stay on this device. Work offline and review pending changes whenever needed."); welcome.setTextSize(15); welcome.setTextColor(ink); welcome.setPadding(dp(14),dp(14),dp(14),dp(14)); welcome.setBackgroundColor(0xFFFFFFFF); root.addView(welcome);
-        LinearLayout stats = new LinearLayout(this); stats.setOrientation(LinearLayout.HORIZONTAL);
-        stats.addView(stat("Members",String.valueOf(members)),new LinearLayout.LayoutParams(0,-2,1));
-        stats.addView(stat("Branches / units",String.valueOf(orgs)),new LinearLayout.LayoutParams(0,-2,1));
-        stats.addView(stat("Care cases",String.valueOf(openCare)),new LinearLayout.LayoutParams(0,-2,1));
-        LinearLayout.LayoutParams stp=new LinearLayout.LayoutParams(-1,-2); stp.topMargin=dp(10); stp.bottomMargin=dp(8); root.addView(stats,stp);
-        ScrollView scroll=new ScrollView(this); LinearLayout menu=new LinearLayout(this); menu.setOrientation(LinearLayout.VERTICAL);
-        menuButton(menu,"People & connections","Connect church members with pastors, Follow-up leaders and teams",this::showPeopleConnections);
-        menuButton(menu,"Members","Register, search, update and review member records",()->showRecords("members"));
-        menuButton(menu,"Church branches & units","Build and view your church structure at every level",()->showRecords("organizations"));
-        menuButton(menu,"Appointments & transfers","Track roles and retain previous appointments",()->showRecords("appointments"));
-        menuButton(menu,"Leadership & governance","Manage reporting lines, pastoral delegates and team appointments",this::showGovernance);
-        menuButton(menu,"Delegation & authority","Define who can act, for whom, and within what scope",()->showRecords("delegations"));
-        menuButton(menu,"Visits & follow-ups","Record pastoral visits and next steps",()->showRecords("visits"));
-        menuButton(menu,"Care cases & escalation","Track care needs, priorities, assignments and resolution",()->showRecords("care_records"));
-        menuButton(menu,"Sync queue & data status","Review local changes awaiting a future cloud sync ("+pending+" pending)",this::showSync);
-        menuButton(menu,"Settings / Account","Google account, app version and local storage",this::showSettings);
-        scroll.addView(menu); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        TextView footer=new TextView(this); footer.setText("Offline ready • SQLite local database • Cloud sync not connected"); footer.setTextColor(muted); footer.setTextSize(12); footer.setGravity(Gravity.CENTER);
+        TextView welcome=new TextView(this);
+        welcome.setText("Welcome. What would you like to do today?\nYour church information is saved on this phone, so you can keep working even when you are offline.");
+        welcome.setTextSize(16); welcome.setTextColor(ink); welcome.setPadding(dp(14),dp(14),dp(14),dp(14)); welcome.setBackgroundColor(0xFFFFFFFF);
+        root.addView(welcome);
+
+        ScrollView scroll=new ScrollView(this);
+        LinearLayout content=new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(0,dp(10),0,dp(10)); scroll.addView(content);
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+
+        TextView everyday=new TextView(this); everyday.setText("Everyday tasks"); everyday.setTextColor(blue); everyday.setTextSize(18); everyday.setTypeface(null,1);
+        LinearLayout.LayoutParams eh=new LinearLayout.LayoutParams(-1,-2); eh.bottomMargin=dp(5); content.addView(everyday,eh);
+        menuButton(content,"＋ Add a member","Save the details of someone in your church",()->showForm("members",null,null));
+        menuButton(content,"Find a member","Look up someone by name or phone number",()->showRecords("members"));
+        menuButton(content,"Record a visit","Save a visit and any next step",()->showForm("visits",null,null));
+        menuButton(content,"Record a care need","Make a note when someone needs support",()->showForm("care_records",null,null));
+
+        TextView manage=new TextView(this); manage.setText("Manage your church"); manage.setTextColor(blue); manage.setTextSize(18); manage.setTypeface(null,1);
+        LinearLayout.LayoutParams mh=new LinearLayout.LayoutParams(-1,-2); mh.topMargin=dp(16); mh.bottomMargin=dp(5); content.addView(manage,mh);
+        menuButton(content,"People and connections","See how members are connected with church workers",this::showPeopleConnections);
+        menuButton(content,"Church branches and groups","Add or view congregations, branches and other groups",()->showRecords("organizations"));
+        menuButton(content,"Church workers and leadership","Manage appointments, reporting and responsibilities",this::showGovernance);
+        menuButton(content,"Delegated responsibilities","Record who is helping and what they are responsible for",()->showRecords("delegations"));
+        menuButton(content,"Past visits and care","Review visits, follow-ups and care records",()->showRecords("visits"));
+        
+        TextView more=new TextView(this); more.setText("More tools"); more.setTextColor(blue); more.setTextSize(18); more.setTypeface(null,1);
+        LinearLayout.LayoutParams morep=new LinearLayout.LayoutParams(-1,-2); morep.topMargin=dp(16); morep.bottomMargin=dp(5); content.addView(more,morep);
+        menuButton(content,"Appointments and role changes","Record church roles and changes over time",()->showRecords("appointments"));
+        menuButton(content,"Backup and move my information","Save a copy or move your church information to another phone",this::showSync);
+        menuButton(content,"Settings and account","Manage sign-in and see app information",this::showSettings);
+
+        TextView footer=new TextView(this); footer.setText("You can use ChurchCare without an internet connection."); footer.setTextColor(muted); footer.setTextSize(12); footer.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(-1,-2); fp.topMargin=dp(8); root.addView(footer,fp);
     }
 
@@ -824,18 +720,23 @@ public final class MainActivity extends Activity {
     }
 
     private void showRecords(String table) {
-        String title=titleFor(table); base(title, subtitleFor(table));
+        String title=titleFor(table);
+        String description=table.equals("members")?"Find someone or add a new member.":table.equals("organizations")?"View the church locations and groups you have added.":"Choose a record to view or update it.";
+        base(title,description);
         final EditText search;
-        if (table.equals("members")) {
-            search=new EditText(this); search.setSingleLine(true); search.setHint("Search name, phone, church or location");
+        if(table.equals("members")){
+            search=new EditText(this); search.setSingleLine(true); search.setHint("Type a name or phone number");
             root.addView(search);
         } else search=null;
-        Button add=new Button(this); add.setText("+ Add "+singular(table)); add.setOnClickListener(v->showForm(table,null,null)); root.addView(add);
-        ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        if (search != null) {
-            Button find=new Button(this); find.setText("Search members"); find.setOnClickListener(v->renderInto(table,list,search.getText().toString()));
-            root.addView(find, root.indexOfChild(scroll));
-            search.setOnEditorActionListener((v,action,event)->{renderInto(table,list,search.getText().toString());return false;});
+        Button add=new Button(this); add.setText(table.equals("members")?"＋ Add a member":"＋ Add "+singular(table)); add.setAllCaps(false);
+        add.setOnClickListener(v->showForm(table,null,null)); root.addView(add);
+        ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        if(search!=null){
+            Button find=new Button(this); find.setText("Find member"); find.setAllCaps(false);
+            find.setOnClickListener(v->renderInto(table,list,search.getText().toString()));
+            root.addView(find,root.indexOfChild(scroll));
+            search.setOnEditorActionListener((v,action,event)->{renderInto(table,list,search.getText().toString());return true;});
         }
         renderInto(table,list,"");
     }
@@ -863,16 +764,23 @@ public final class MainActivity extends Activity {
 
     private void showRecordActions(String table,String id,ContentValues data) {
         String[] actions=table.equals("members")
-            ? new String[]{"View details","Edit record","Archive record","Choose profile thumbnail","Choose additional photo 1 (local only)","Choose additional photo 2 (local only)"}
-            : new String[]{"View details","Edit record","Archive record"};
-        new AlertDialog.Builder(this).setTitle(recordTitle(table,data)).setItems(actions,(d,which)->{
-            if(which==0) new AlertDialog.Builder(this).setTitle(recordTitle(table,data)).setMessage(recordDetail(table,data)+"\n\n"+allDetails(data)).setPositiveButton("Close",null).show();
-            else if(which==1) showForm(table,id,data);
-            else if(which==2) new AlertDialog.Builder(this).setTitle("Archive record?").setMessage("This hides the record from normal lists and records the deletion for future synchronization.").setNegativeButton("Cancel",null).setPositiveButton("Archive",(x,w)->{database.softDelete(table,id);showRecords(table);Toast.makeText(this,"Record archived",Toast.LENGTH_SHORT).show();}).show();
-            else if(table.equals("members")) {
-                photoRecordId=id;
-                photoColumn=which==3?"profile_photo_path":which==4?"extra_photo_one_path":"extra_photo_two_path";
-                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("image/*");
+            ? new String[]{"View details","Edit details","Archive this record","Choose profile photo","Choose another photo","Choose a third photo"}
+            : new String[]{"View details","Edit details","Archive this record"};
+        new AlertDialog.Builder(this).setTitle(recordTitle(table,data)).setItems(actions,(dialog,which)->{
+            if(which==0){
+                String details=recordDetail(table,data);
+                new AlertDialog.Builder(this).setTitle(recordTitle(table,data))
+                    .setMessage((details==null||details.trim().isEmpty()?"No extra details have been added.":details)+"\n\nChoose Edit details if you need to make a change.")
+                    .setPositiveButton("Close",null).show();
+            } else if(which==1) showForm(table,id,data);
+            else if(which==2) new AlertDialog.Builder(this).setTitle("Archive this record?")
+                .setMessage("This removes the record from the usual lists but keeps it in your church information. You can continue working with the other records.")
+                .setNegativeButton("Keep record",null).setPositiveButton("Archive",(d,w)->{
+                    database.softDelete(table,id);showRecords(table);Toast.makeText(this,"Record archived",Toast.LENGTH_SHORT).show();
+                }).show();
+            else if(table.equals("members")){
+                photoRecordId=id; photoColumn=which==3?"profile_photo_path":which==4?"extra_photo_one_path":"extra_photo_two_path";
+                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("image/*");
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
                 startActivityForResult(intent,PICK_MEMBER_PHOTO);
             }
@@ -1173,21 +1081,36 @@ public final class MainActivity extends Activity {
     private String today(){return new SimpleDateFormat("yyyy-MM-dd",Locale.US).format(new Date());}
 
     private void showSync() {
-        base("Sync queue & status","Offline records stay on this device. Cloud backup is explicit; automatic multi-device sync is not active.");
-        Button exportButton=new Button(this); exportButton.setText("Export local backup"); exportButton.setAllCaps(false); exportButton.setOnClickListener(v->{ Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("application/zip"); intent.putExtra(Intent.EXTRA_TITLE,"ChurchCare-backup-"+new SimpleDateFormat("yyyyMMdd-HHmm",Locale.US).format(new Date())+".zip"); startActivityForResult(intent,EXPORT_BACKUP); }); root.addView(exportButton);
-        Button driveUpload=new Button(this); driveUpload.setText("Back up full ChurchCare data to Google Drive"); driveUpload.setAllCaps(false); driveUpload.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Upload full ChurchCare backup?").setMessage("This uploads a ZIP backup of member records, visits, care cases, notes, the change log, and accessible profile thumbnails to the Google Drive account you authorize. Additional member photos stay on this device and are not uploaded. These records may contain sensitive pastoral information. Upload only to an account and Drive location you trust.").setNegativeButton("Cancel",null).setPositiveButton("Continue",(d,w)->authorizeDrive("upload")).show()); root.addView(driveUpload);
-        Button driveRestore=new Button(this); driveRestore.setText("Restore latest ChurchCare Drive backup"); driveRestore.setAllCaps(false); driveRestore.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Replace this device's records?").setMessage("ChurchCare will download the newest backup created by this app in the Google Drive account you authorize and replace the records and change log on this device. Export a local backup first. Only continue if you trust the selected Google account and backup.").setNegativeButton("Cancel",null).setPositiveButton("Continue",(d,w)->authorizeDrive("restore")).show()); root.addView(driveRestore);
-        Button importButton=new Button(this); importButton.setText("Restore from backup (replaces local records)"); importButton.setAllCaps(false); importButton.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Restore ChurchCare backup?").setMessage("Restore replaces the records and change log currently stored on this device. Export a backup of the current data first if you may need it. Only choose a trusted ChurchCare ZIP backup or an older ChurchCare JSON backup.").setNegativeButton("Cancel",null).setPositiveButton("Choose backup",(d,w)->{ Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("*/*"); intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivityForResult(intent,IMPORT_BACKUP); }).show()); root.addView(importButton);
-        android.content.SharedPreferences syncPrefs=getSharedPreferences("churchcare_sync_status",MODE_PRIVATE);
-        String lastDriveBackup=syncPrefs.getString("drive_backup_time","");
-        String driveBackupStatus=syncPrefs.getString("drive_backup_status","Not yet confirmed");
-        String lastDriveRestore=syncPrefs.getString("drive_restore_time","");
-        String driveRestoreStatus=syncPrefs.getString("drive_restore_status","Not yet confirmed");
-        String localBackupTime=syncPrefs.getString("local_backup_time","");
+        base("Back up your church information","Keep a safe copy so you can move your information or recover it if you change phones.");
+        TextView intro=new TextView(this);
+        intro.setText("Your church information is saved on this phone. A backup is a separate copy. Choose a safe place and an account that you trust, because church records may contain private information.");
+        intro.setTextColor(ink);intro.setTextSize(15);intro.setPadding(dp(12),dp(12),dp(12),dp(12));intro.setBackgroundColor(0xFFFFFFFF);root.addView(intro);
+
+        Button exportButton=new Button(this);exportButton.setText("Save a backup file on this phone");exportButton.setAllCaps(false);
+        exportButton.setOnClickListener(v->{Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("application/zip");intent.putExtra(Intent.EXTRA_TITLE,"ChurchCare-backup-"+new SimpleDateFormat("yyyyMMdd-HHmm",Locale.US).format(new Date())+".zip");startActivityForResult(intent,EXPORT_BACKUP);});root.addView(exportButton);
+        Button driveUpload=new Button(this);driveUpload.setText("Save a copy to Google Drive");driveUpload.setAllCaps(false);
+        driveUpload.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Save a copy to Google Drive?")
+            .setMessage("This copies your church records, visits, care notes, change history and available profile photos to the Google Drive account you choose. Some additional photos remain only on this phone. Only use an account and storage location you trust.")
+            .setNegativeButton("Not now",null).setPositiveButton("Continue",(d,w)->authorizeDrive("upload")).show());root.addView(driveUpload);
+        Button driveRestore=new Button(this);driveRestore.setText("Bring my latest Google Drive copy to this phone");driveRestore.setAllCaps(false);
+        driveRestore.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Replace information on this phone?")
+            .setMessage("ChurchCare will use the latest backup in the Google Drive account you choose. It will replace the church information currently on this phone. Save a separate copy first if you may need the current information.")
+            .setNegativeButton("Cancel",null).setPositiveButton("Continue",(d,w)->authorizeDrive("restore")).show());root.addView(driveRestore);
+        Button importButton=new Button(this);importButton.setText("Restore from a backup file");importButton.setAllCaps(false);
+        importButton.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Restore from a backup file?")
+            .setMessage("Restoring replaces the church information currently on this phone. If you need to keep it, save a separate backup first.")
+            .setNegativeButton("Cancel",null).setPositiveButton("Choose file",(d,w)->{Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivityForResult(intent,IMPORT_BACKUP);}).show());root.addView(importButton);
+
+        android.content.SharedPreferences prefs=getSharedPreferences("churchcare_sync_status",MODE_PRIVATE);
+        String driveTime=prefs.getString("drive_backup_time",""),driveStatus=prefs.getString("drive_backup_status","Not yet confirmed");
+        String restoreTime=prefs.getString("drive_restore_time",""),restoreStatus=prefs.getString("drive_restore_status","Not yet confirmed");
+        String localTime=prefs.getString("local_backup_time","");
         TextView summary=new TextView(this);
-        summary.setText("Backup operation status\\n\\nGoogle Drive backup: "+driveBackupStatus+(lastDriveBackup.isEmpty()?"":"\\nLast completed: "+lastDriveBackup)+"\\n\\nGoogle Drive restore: "+driveRestoreStatus+(lastDriveRestore.isEmpty()?"":"\\nLast completed: "+lastDriveRestore)+"\\n\\nLocal backup: "+(localBackupTime.isEmpty()?"Not yet confirmed": "Completed — "+localBackupTime));
-        summary.setTextColor(ink); summary.setTextSize(15); summary.setPadding(dp(12),dp(12),dp(12),dp(12)); summary.setBackgroundColor(0xFFFFFFFF); root.addView(summary);
-        ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        summary.setText("Your backup history\n\nGoogle Drive copy: "+driveStatus+(driveTime.isEmpty()?"":"\nLast completed: "+driveTime)
+            +"\n\nGoogle Drive restore: "+restoreStatus+(restoreTime.isEmpty()?"":"\nLast completed: "+restoreTime)
+            +"\n\nBackup file: "+(localTime.isEmpty()?"Not yet confirmed":"Saved — "+localTime));
+        summary.setTextColor(ink);summary.setTextSize(14);summary.setPadding(dp(12),dp(16),dp(12),dp(16));summary.setBackgroundColor(0xFFFFFFFF);
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(12);root.addView(summary,sp);
     }
 
     private GoogleSignInOptions firebaseGoogleSignInOptions() {
@@ -1238,61 +1161,36 @@ public final class MainActivity extends Activity {
     }
 
     private void showSettings() {
-        base("Settings & account", "Manage your ChurchCare identity and review app information");
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(content);
+        base("Settings","Manage your sign-in and learn about ChurchCare.");
+        ScrollView scroll=new ScrollView(this);LinearLayout content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);scroll.addView(content);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-
-        TextView heading = new TextView(this);
-        heading.setText("ChurchCare account");
-        heading.setTextColor(blue); heading.setTextSize(18); heading.setTypeface(null,1);
-        content.addView(heading);
-
-        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-        TextView account = new TextView(this);
-        account.setTextColor(ink); account.setTextSize(15);
-        account.setPadding(dp(12),dp(14),dp(12),dp(14));
-        account.setBackgroundColor(0xFFFFFFFF);
-        if (user == null) {
-            account.setText("Not signed in\n\nSign in with the same Google account you use for ChurchCare Google Drive backup and restore. This establishes your ChurchCare identity; it does not upload or replace local records.");
+        TextView heading=new TextView(this);heading.setText("Your ChurchCare sign-in");heading.setTextColor(blue);heading.setTextSize(18);heading.setTypeface(null,1);content.addView(heading);
+        FirebaseUser user=FirebaseAuth.getInstance().getCurrentUser();
+        TextView account=new TextView(this);account.setTextColor(ink);account.setTextSize(15);account.setPadding(dp(12),dp(14),dp(12),dp(14));account.setBackgroundColor(0xFFFFFFFF);
+        if(user==null){
+            account.setText("You are not signed in. You can still use the information saved on this phone. Sign in when you need to use ChurchCare account features.");
             content.addView(account);
-            Button signIn = new Button(this);
-            signIn.setText("Continue with Google"); signIn.setAllCaps(false);
-            signIn.setOnClickListener(v->startFirebaseGoogleSignIn());
-            content.addView(signIn);
-        } else {
-            String displayName = user.getDisplayName() == null ? "" : user.getDisplayName();
-            String email = user.getEmail() == null ? "Email unavailable" : user.getEmail();
-            account.setText((displayName.isEmpty() ? "Google account" : displayName)+"\n"+email+"\n\nChurchCare identity connected. Administrative Owner/Reviewer privileges have not yet been assigned.");
+            Button signIn=new Button(this);signIn.setText("Sign in with Google");signIn.setAllCaps(false);signIn.setOnClickListener(v->startFirebaseGoogleSignIn());content.addView(signIn);
+        }else{
+            String name=user.getDisplayName()==null?"":user.getDisplayName();String email=user.getEmail()==null?"":user.getEmail();
+            account.setText((name.isEmpty()?"Signed in":name)+(email.isEmpty()?"":"\n"+email)+"\n\nYour church information remains saved on this phone. Signing in does not automatically upload it.");
             content.addView(account);
-            Button signOut = new Button(this);
-            signOut.setText("Sign out of ChurchCare account"); signOut.setAllCaps(false);
-            signOut.setOnClickListener(v -> {
-                // Sign out only from Firebase. Do not clear the separate Google/Drive authorization state.
-                FirebaseAuth.getInstance().signOut();
-                showSettings();
-            });
-            content.addView(signOut);
+            Button signOut=new Button(this);signOut.setText("Sign out");signOut.setAllCaps(false);
+            signOut.setOnClickListener(v->{FirebaseAuth.getInstance().signOut();showSettings();});content.addView(signOut);
         }
-
-        TextView note = new TextView(this);
-        note.setText("Google Drive backup and restore uses its own permission and remains separate from this ChurchCare sign-in. Signing in or out here does not delete local SQLite records or change Drive backups.");
-        note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(4),dp(12),dp(4),dp(12));
-        content.addView(note);
-
-        Button about = new Button(this);
-        about.setText("About ChurchCare"); about.setAllCaps(false);
-        about.setOnClickListener(v->showAbout());
-        content.addView(about);
+        TextView note=new TextView(this);note.setText("Saving a backup to Google Drive is a separate choice. Signing in or out does not delete the information saved on this phone.");
+        note.setTextColor(muted);note.setTextSize(13);note.setPadding(dp(4),dp(14),dp(4),dp(14));content.addView(note);
+        Button backup=new Button(this);backup.setText("Back up or move my information");backup.setAllCaps(false);backup.setOnClickListener(v->showSync());content.addView(backup);
+        Button about=new Button(this);about.setText("About ChurchCare");about.setAllCaps(false);about.setOnClickListener(v->showAbout());content.addView(about);
     }
 
     private void showAbout() {
         String version="Version details unavailable";
-        try { PackageInfo p=getPackageManager().getPackageInfo(getPackageName(),0); version="Version "+p.versionName+" ("+p.getLongVersionCode()+")\nPackage: "+getPackageName(); }
+        try { PackageInfo p=getPackageManager().getPackageInfo(getPackageName(),0);version="Version "+p.versionName+" ("+p.getLongVersionCode()+")"; }
         catch(PackageManager.NameNotFoundException ignored){}
-        new AlertDialog.Builder(this).setTitle("About ChurchCare").setMessage(version+"\n\nChurchCare helps manage church members, leadership and pastoral care. It works offline and saves information on this device.\n\nYou can use your Google account to sign in. Google Drive backup is a separate feature. Online sharing and access to private church records are not enabled yet.").setPositiveButton("OK",null).show();
+        new AlertDialog.Builder(this).setTitle("About ChurchCare")
+            .setMessage(version+"\n\nChurchCare helps your church keep member information, organise church workers and record visits and care. You can work without an internet connection. Your information stays on this phone unless you choose to make a backup.")
+            .setPositiveButton("OK",null).show();
     }
     /** Local ZIP backup may include all saved member photos. */
     private void exportBackupArchive(OutputStream destination) throws Exception {
