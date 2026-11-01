@@ -408,36 +408,34 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(-1,-2); fp.topMargin=dp(8); root.addView(footer,fp);
     }
 
-    /** Plain-language directory for connecting members with current church leaders. */
+    /** Independent people directory and cross-unit/cross-department connection workspace. */
     private void showPeopleConnections() {
-        base("People & connections","Choose a person to see who is connected to them");
+        base("People & connections","People are independent of membership, appointments and app accounts");
         TextView note=new TextView(this);
-        note.setText("People can be added and connected without ChurchCare accounts. A connection records a church relationship only; it does not grant access to private member or care records. Area-based leader permissions are not yet enforced in this build, so this screen is not an access-control boundary.");
+        note.setText("Add a person even if they are not a member of this parish or a ChurchCare user. Record relevant upward, downward or colleague connections across departments and units. A proposal is local only and does not mean the other person has accepted it or grant access to private records.");
         note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(12),dp(10),dp(12),dp(10)); note.setBackgroundColor(0xFFFFFFFF);
         root.addView(note);
-        Button addPerson=new Button(this); addPerson.setText("+ Add a person"); addPerson.setAllCaps(false);
-        addPerson.setOnClickListener(v->showForm("members",null,null)); root.addView(addPerson);
-        EditText search=new EditText(this); search.setSingleLine(true); search.setHint("Find someone by name or phone");
-        root.addView(search);
+        Button add=new Button(this); add.setText("+ Add a person"); add.setAllCaps(false);
+        add.setOnClickListener(v->showAddPersonDialog()); root.addView(add);
+        EditText search=new EditText(this); search.setSingleLine(true); search.setHint("Search by name, phone or email"); root.addView(search);
         Button find=new Button(this); find.setText("Search people"); find.setAllCaps(false); root.addView(find);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         Runnable render=()->{
             list.removeAllViews();
-            String q=search.getText().toString().trim();
-            try(Cursor c=q.isEmpty()?database.listMembers():database.searchMembers(q)) {
+            try(Cursor c=database.listPeople(search.getText().toString())) {
                 boolean found=false;
                 while(c.moveToNext()) {
-                    if(!"Active".equalsIgnoreCase(get(c,"status"))) continue;
                     found=true;
-                    String id=get(c,"id"), name=get(c,"full_name"), phone=get(c,"phone"), org=get(c,"organization");
-                    Button person=new Button(this); person.setAllCaps(false); person.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-                    person.setText(name+"\n"+join(phone,org)+"\nView connections");
-                    person.setOnClickListener(v->showMemberConnections(id,name));
-                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=dp(5); list.addView(person,lp);
+                    String id=get(c,"id"), name=get(c,"full_name"), phone=get(c,"phone"), email=get(c,"email");
+                    Button item=new Button(this); item.setAllCaps(false); item.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+                    item.setText(name+"\n"+join(phone,email)+"\nView connections");
+                    item.setOnClickListener(v->showPersonRelationships(id,name));
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=dp(5); list.addView(item,lp);
                 }
                 if(!found) {
-                    TextView empty=new TextView(this); empty.setText("No active people found. Add someone or check the member's status in the directory.");
+                    TextView empty=new TextView(this);
+                    empty.setText("No people found. Add a person to start building your connection network.");
                     empty.setTextColor(muted); empty.setPadding(dp(12),dp(18),dp(12),dp(18)); list.addView(empty);
                 }
             }
@@ -447,65 +445,80 @@ public final class MainActivity extends Activity {
         render.run();
     }
 
-    private void showMemberConnections(String memberId,String memberName) {
-        base("People connected to",memberName);
+    private void showAddPersonDialog() {
+        LinearLayout form=new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); form.setPadding(dp(18),dp(8),dp(18),0);
+        EditText name=new EditText(this); name.setSingleLine(true); name.setHint("Full name (required)"); form.addView(name);
+        EditText phone=new EditText(this); phone.setSingleLine(true); phone.setHint("Phone number (optional)"); phone.setInputType(InputType.TYPE_CLASS_PHONE); form.addView(phone);
+        EditText email=new EditText(this); email.setSingleLine(true); email.setHint("Email address (optional)"); email.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS); form.addView(email);
+        new AlertDialog.Builder(this).setTitle("Add a person").setMessage("This creates a person identity only. It does not register parish membership or create a ChurchCare account.")
+            .setView(form).setNegativeButton("Cancel",null).setPositiveButton("Save",(d,w)->{
+                try {
+                    String id=database.addPersonIdentity(name.getText().toString(),phone.getText().toString(),email.getText().toString());
+                    Toast.makeText(this,"Person saved on this device",Toast.LENGTH_SHORT).show();
+                    showPersonRelationships(id,name.getText().toString().trim());
+                } catch(Exception error) {
+                    Toast.makeText(this,"Could not save person: "+error.getMessage(),Toast.LENGTH_LONG).show();
+                }
+            }).show();
+    }
+
+    private void showPersonRelationships(String personId,String personName) {
+        base("People connected to",personName);
         TextView note=new TextView(this);
-        note.setText("Connect this person to the leaders responsible for their pastoral care, Follow-up or team. The same person may have more than one connection.");
-        note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(12),dp(10),dp(12),dp(10)); note.setBackgroundColor(0xFFFFFFFF);
-        root.addView(note);
-        Button add=new Button(this); add.setText("+ Add a connection"); add.setAllCaps(false);
-        add.setOnClickListener(v->chooseMemberConnection(memberId,memberName)); root.addView(add);
+        note.setText("Connections may be upward, downward or lateral, and may cross church units or departments. A proposal remains unaccepted until the other participant can independently verify and respond.");
+        note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(12),dp(10),dp(12),dp(10)); note.setBackgroundColor(0xFFFFFFFF); root.addView(note);
+        Button add=new Button(this); add.setText("+ Propose a connection"); add.setAllCaps(false);
+        add.setOnClickListener(v->choosePersonConnection(personId,personName)); root.addView(add);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        try(Cursor c=database.listMemberConnections(memberId)) {
+        try(Cursor c=database.listPersonRelationships(personId)) {
             if(!c.moveToFirst()) {
-                TextView empty=new TextView(this); empty.setText("No connections recorded yet. Add the person's Pastor, Follow-up Leader, Team Leader or another church contact.");
+                TextView empty=new TextView(this); empty.setText("No connections recorded yet. Propose an overseer, someone under this person's responsibility, or a relevant colleague/coordinator.");
                 empty.setTextColor(muted); empty.setPadding(dp(12),dp(18),dp(12),dp(18)); list.addView(empty);
             } else do {
-                String id=get(c,"id"), type=get(c,"connection_type"), leader=get(c,"person_name");
-                String role=get(c,"role"), org=get(c,"organization_name");
-                Button item=new Button(this); item.setAllCaps(false); item.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-                item.setText(type+"\n"+leader+" — "+role+"\n"+org+"\nTap to remove this connection");
-                item.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Remove this connection?")
-                    .setMessage("This will remove only the relationship. Neither person's directory record nor the leadership appointment will be deleted.")
-                    .setNegativeButton("Keep",null).setPositiveButton("Remove",(d,w)->{
-                        FirebaseUser actor=FirebaseAuth.getInstance().getCurrentUser();
-                        try { database.removeMemberConnection(id,actor==null?null:actor.getUid()); showMemberConnections(memberId,memberName); }
-                        catch(Exception error){Toast.makeText(this,"Could not remove connection: "+error.getMessage(),Toast.LENGTH_LONG).show();}
-                    }).show());
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=dp(5); list.addView(item,lp);
+                String source=get(c,"source_name"), target=get(c,"target_name");
+                String type=get(c,"relationship_type"), label=get(c,"relationship_label"), status=get(c,"status");
+                TextView item=new TextView(this); item.setText(source+"  →  "+target+"\n"+type+(label.isEmpty()?"":" • "+label)+"\nStatus: "+status.replace('_',' '));
+                item.setTextColor(ink); item.setTextSize(14); item.setPadding(dp(12),dp(12),dp(12),dp(12)); item.setBackgroundColor(0xFFFFFFFF);
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=dp(6); list.addView(item,lp);
             } while(c.moveToNext());
         }
     }
 
-    private void chooseMemberConnection(String memberId,String memberName) {
+    private void choosePersonConnection(String personId,String personName) {
         java.util.ArrayList<String> labels=new java.util.ArrayList<>();
         java.util.ArrayList<String> ids=new java.util.ArrayList<>();
-        try(Cursor c=database.listCurrentGovernanceAppointments()) {
+        try(Cursor c=database.listPeople("")) {
             while(c.moveToNext()) {
                 String id=get(c,"id");
-                ids.add(id); labels.add(get(c,"person_name")+" — "+get(c,"role")+" ("+get(c,"organization_name")+")");
+                if(id.equals(personId)) continue;
+                ids.add(id); labels.add(get(c,"full_name")+" — "+join(get(c,"phone"),get(c,"email")));
             }
         }
         if(ids.isEmpty()) {
-            new AlertDialog.Builder(this).setTitle("No current leaders yet")
-                .setMessage("Add current leadership appointments first. You can still keep people in the church directory without connecting them to a leader.")
-                .setPositiveButton("OK",null).show(); return;
+            new AlertDialog.Builder(this).setTitle("Add another person first")
+                .setMessage("A connection needs two separate people. Add the other person to the directory before creating the relationship.")
+                .setPositiveButton("Add person",(d,w)->showAddPersonDialog()).setNegativeButton("Cancel",null).show(); return;
         }
-        new AlertDialog.Builder(this).setTitle("Choose the leader")
+        new AlertDialog.Builder(this).setTitle("Choose the other person")
             .setItems(labels.toArray(new String[0]),(dialog,which)->{
-                final String appointmentId=ids.get(which);
-                String[] types={"My Pastor","My Pastoral Delegate","My Follow-up Leader","My Team Leader","My Department Head","Other church connection"};
-                new AlertDialog.Builder(this).setTitle("How is this person connected?")
+                String targetId=ids.get(which), targetName=labels.get(which);
+                String[] types={"OVERSEER — person responsible for them","RESPONSIBILITY — person under their responsibility","COLLEAGUE — relevant colleague or coordinator","OTHER — another working relationship"};
+                new AlertDialog.Builder(this).setTitle("What is the relationship?")
                     .setItems(types,(d,w)->{
-                        FirebaseUser actor=FirebaseAuth.getInstance().getCurrentUser();
-                        try {
-                            database.addMemberConnection(memberId,appointmentId,types[w],actor==null?null:actor.getUid());
-                            Toast.makeText(this,"Connection saved on this device",Toast.LENGTH_SHORT).show();
-                            showMemberConnections(memberId,memberName);
-                        } catch(Exception error) {
-                            Toast.makeText(this,"Could not save connection: "+error.getMessage(),Toast.LENGTH_LONG).show();
-                        }
+                        EditText detail=new EditText(this); detail.setSingleLine(true); detail.setHint("Optional context (e.g. Area Follow-up Coordinator)");
+                        String type=new String[]{"OVERSEER","RESPONSIBILITY","COLLEAGUE","OTHER"}[w];
+                        new AlertDialog.Builder(this).setTitle("Describe the connection").setView(detail)
+                            .setNegativeButton("Cancel",null).setPositiveButton("Propose",(dd,ww)->{
+                                FirebaseUser actor=FirebaseAuth.getInstance().getCurrentUser();
+                                try {
+                                    database.proposePersonRelationship(personId,targetId,null,null,type,detail.getText().toString(),null,actor==null?null:actor.getUid());
+                                    Toast.makeText(this,"Connection proposal saved locally; recipient acceptance is not yet available.",Toast.LENGTH_LONG).show();
+                                    showPersonRelationships(personId,personName);
+                                } catch(Exception error) {
+                                    Toast.makeText(this,"Could not save proposal: "+error.getMessage(),Toast.LENGTH_LONG).show();
+                                }
+                            }).show();
                     }).setNegativeButton("Cancel",null).show();
             }).setNegativeButton("Cancel",null).show();
     }
