@@ -1278,7 +1278,7 @@ public final class MainActivity extends Activity {
         String version="Version details unavailable";
         try { PackageInfo p=getPackageManager().getPackageInfo(getPackageName(),0); version="Version "+p.versionName+" ("+p.getLongVersionCode()+")\nPackage: "+getPackageName(); }
         catch(PackageManager.NameNotFoundException ignored){}
-        new AlertDialog.Builder(this).setTitle("About ChurchCare").setMessage(version+"\n\nOffline-first church and member care. SQLite remains the local source of truth.\n\nGoogle Drive backup/restore is authorized separately. Firebase account sign-in establishes identity; role-based access and cloud record synchronization are separate stages and are not enabled yet.").setPositiveButton("OK",null).show();
+        new AlertDialog.Builder(this).setTitle("About ChurchCare").setMessage(version+"\n\nChurchCare helps manage church members, leadership and pastoral care. It works offline and saves information on this device.\n\nYou can use your Google account to sign in. Google Drive backup is a separate feature. Online sharing and access to private church records are not enabled yet.").setPositiveButton("OK",null).show();
     }
     /** Local ZIP backup may include all saved member photos. */
     private void exportBackupArchive(OutputStream destination) throws Exception {
