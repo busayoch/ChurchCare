@@ -478,7 +478,11 @@ public final class MainActivity extends Activity {
             } else do {
                 String source=get(c,"source_name"), target=get(c,"target_name");
                 String type=get(c,"relationship_type"), label=get(c,"relationship_label"), status=get(c,"status");
-                TextView item=new TextView(this); item.setText(source+"  →  "+target+"\n"+type+(label.isEmpty()?"":" • "+label)+"\nStatus: "+status.replace('_',' '));
+                String sourceRole=get(c,"source_appointment_role"), sourceOrg=get(c,"source_organization_name");
+                String targetRole=get(c,"target_appointment_role"), targetOrg=get(c,"target_organization_name");
+                String sourceContext=sourceRole.isEmpty()?"Person-level":sourceRole+" — "+sourceOrg;
+                String targetContext=targetRole.isEmpty()?"Person-level":targetRole+" — "+targetOrg;
+                TextView item=new TextView(this); item.setText(source+"  →  "+target+"\n"+sourceContext+"  →  "+targetContext+"\n"+type+(label.isEmpty()?"":" • "+label)+"\nStatus: "+status.replace('_',' '));
                 item.setTextColor(ink); item.setTextSize(14); item.setPadding(dp(12),dp(12),dp(12),dp(12)); item.setBackgroundColor(0xFFFFFFFF);
                 LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=dp(6); list.addView(item,lp);
             } while(c.moveToNext());
@@ -514,15 +518,41 @@ public final class MainActivity extends Activity {
                                 try {
                                     String sourceId="OVERSEER".equals(type)?targetId:personId;
                                     String destinationId="OVERSEER".equals(type)?personId:targetId;
-                                    database.proposePersonRelationship(sourceId,destinationId,null,null,type,detail.getText().toString(),null,actor==null?null:actor.getUid());
-                                    Toast.makeText(this,"Connection proposal saved locally; recipient acceptance is not yet available.",Toast.LENGTH_LONG).show();
-                                    showPersonRelationships(personId,personName);
+                                    chooseAppointmentForPerson(sourceId,"Source — "+(sourceId.equals(personId)?personName:targetName),sourceAppointmentId ->
+                                        chooseAppointmentForPerson(destinationId,"Target — "+(destinationId.equals(personId)?personName:targetName),targetAppointmentId -> {
+                                            try {
+                                                database.proposePersonRelationship(sourceId,destinationId,sourceAppointmentId,targetAppointmentId,type,detail.getText().toString(),null,actor==null?null:actor.getUid());
+                                                Toast.makeText(this,"Connection proposal saved locally; recipient acceptance is not yet available.",Toast.LENGTH_LONG).show();
+                                                showPersonRelationships(personId,personName);
+                                            } catch(Exception saveError) {
+                                                Toast.makeText(this,"Could not save proposal: "+saveError.getMessage(),Toast.LENGTH_LONG).show();
+                                            }
+                                        }));
                                 } catch(Exception error) {
                                     Toast.makeText(this,"Could not save proposal: "+error.getMessage(),Toast.LENGTH_LONG).show();
                                 }
                             }).show();
                     }).setNegativeButton("Cancel",null).show();
             }).setNegativeButton("Cancel",null).show();
+    }
+
+    private interface AppointmentChoice { void selected(String appointmentId); }
+
+    /** Appointment selection is optional: relationships may remain person-level. */
+    private void chooseAppointmentForPerson(String personId,String heading,AppointmentChoice callback) {
+        java.util.ArrayList<String> labels=new java.util.ArrayList<>();
+        java.util.ArrayList<String> ids=new java.util.ArrayList<>();
+        ids.add(null); labels.add("Person-level connection (not tied to an appointment)");
+        try(Cursor c=database.listPersonAppointments(personId)) {
+            while(c.moveToNext()) {
+                ids.add(get(c,"id"));
+                labels.add(get(c,"role")+" — "+get(c,"organization_name"));
+            }
+        }
+        new AlertDialog.Builder(this).setTitle(heading)
+            .setMessage("Choose the appointment relevant to this end of the connection, or keep it at person level.")
+            .setItems(labels.toArray(new String[0]),(dialog,which)->callback.selected(ids.get(which)))
+            .setNegativeButton("Cancel",null).show();
     }
 
     /** Local governance workspace. These records do not grant cloud or individual-record permissions. */
