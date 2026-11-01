@@ -488,13 +488,27 @@ public final class MemberDatabase extends SQLiteOpenHelper {
                 if(!c.moveToFirst() || c.getInt(0)!=2)
                     throw new IllegalArgumentException("Choose an active member and a current leadership appointment.");
             }
+            String existingId=null;
+            try(Cursor c=db.query("member_connections",new String[]{"id"},
+                    "member_id=? AND appointment_id=? AND connection_type=?",
+                    new String[]{memberId,appointmentId,connectionType.trim()},null,null,null,"1")) {
+                if(c.moveToFirst()) existingId=c.getString(0);
+            }
             ContentValues link=new ContentValues();
-            link.put("id",UUID.randomUUID().toString()); link.put("member_id",memberId);
-            link.put("appointment_id",appointmentId); link.put("connection_type",connectionType.trim());
-            link.put("status","Current"); if(actorUid!=null&&!actorUid.trim().isEmpty()) link.put("created_by_uid",actorUid);
-            link.put("created_at",now); link.put("updated_at",now); link.put("deleted",0); link.put("sync_state","LOCAL_ONLY");
-            db.insertOrThrow("member_connections",null,link);
-            logChange(db,"member_connection",link.getAsString("id"),"CREATE",now);
+            if(existingId==null) link.put("id",UUID.randomUUID().toString());
+            link.put("member_id",memberId); link.put("appointment_id",appointmentId);
+            link.put("connection_type",connectionType.trim()); link.put("status","Current");
+            if(actorUid!=null&&!actorUid.trim().isEmpty()) link.put("created_by_uid",actorUid);
+            link.put("updated_at",now); link.put("deleted",0); link.put("sync_state","LOCAL_ONLY");
+            String linkId;
+            if(existingId==null) {
+                link.put("created_at",now); db.insertOrThrow("member_connections",null,link);
+                linkId=link.getAsString("id");
+            } else {
+                db.update("member_connections",link,"id=?",new String[]{existingId});
+                linkId=existingId;
+            }
+            logChange(db,"member_connection",linkId,existingId==null?"CREATE":"UPDATE",now);
             if(actorUid!=null&&!actorUid.trim().isEmpty()) {
                 ContentValues audit=new ContentValues(); audit.put("id",UUID.randomUUID().toString());
                 audit.put("actor_uid",actorUid); audit.put("action","MEMBER_CONNECTION_CREATED");
