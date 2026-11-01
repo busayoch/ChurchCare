@@ -414,6 +414,14 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             new String[]{q,q,q,q,q}, null, null, "full_name COLLATE NOCASE ASC");
     }
 
+    /** Return the five newest visit records explicitly linked to this member. */
+    public Cursor listVisitsForMember(String memberId) {
+        return getReadableDatabase().query("visits", null,
+            "deleted=0 AND member_id=?",
+            new String[]{memberId}, null, null,
+            "visit_date DESC, created_at DESC", "5");
+    }
+
     public int count(String table) {
         checkTable(table);
         try (Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM " + table + " WHERE deleted=0", null)) {
