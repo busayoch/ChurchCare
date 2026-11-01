@@ -637,6 +637,60 @@ public final class MemberDatabase extends SQLiteOpenHelper {
             new String[]{like,like,like});
     }
 
+    /** List legacy connections whose target appointment still needs a deliberate person match. */
+    public Cursor listUnresolvedLegacyAppointments() {
+        return getReadableDatabase().rawQuery(
+            "SELECT a.id AS appointment_id,a.person_name,a.role,COALESCE(o.name,'Unassigned') AS organization_name,COUNT(mc.id) AS legacy_count " +
+            "FROM appointments a JOIN member_connections mc ON mc.appointment_id=a.id AND mc.deleted=0 " +
+            "LEFT JOIN organizations o ON o.id=a.organization_id " +
+            "WHERE a.person_id IS NULL AND a.deleted=0 " +
+            "GROUP BY a.id,a.person_name,a.role,o.name ORDER BY a.person_name COLLATE NOCASE,a.role COLLATE NOCASE",
+            null);
+    }
+
+    /**
+     * Manually resolve the person behind a legacy appointment. The original
+     * member_connections rows remain untouched; equivalent relationship rows
+     * are added as LEGACY_RECORDED, never as participant-accepted connections.
+     */
+    public int resolveLegacyAppointmentPerson(String appointmentId, String personId) {
+        if (appointmentId == null || appointmentId.trim().isEmpty() || personId == null || personId.trim().isEmpty())
+            throw new IllegalArgumentException("Choose an appointment and a person.");
+        SQLiteDatabase db = getWritableDatabase();
+        long now = System.currentTimeMillis();
+        db.beginTransaction();
+        try {
+            try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM people WHERE id=? AND deleted=0", new String[]{personId})) {
+                if (!c.moveToFirst() || c.getInt(0) != 1)
+                    throw new IllegalArgumentException("The selected person is no longer available.");
+            }
+            ContentValues appointment = new ContentValues();
+            appointment.put("person_id", personId);
+            appointment.put("updated_at", now);
+            int changed = db.update("appointments", appointment, "id=? AND person_id IS NULL AND deleted=0", new String[]{appointmentId});
+            if (changed != 1)
+                throw new IllegalStateException("This legacy appointment has already been matched or is no longer available. Refresh the list.");
+            db.execSQL(
+                "INSERT OR IGNORE INTO person_relationships(id,source_person_id,target_person_id,target_appointment_id,relationship_type,relationship_label,direction,scope_organization_id,status,start_date,end_date,initiated_by_uid,created_at,updated_at,deleted,sync_state) " +
+                "SELECT 'legacy-member-connection-'||mc.id,m.person_id,?,mc.appointment_id,mc.connection_type," +
+                "'Migrated from the previous People & connections register after manual person matching','SOURCE_TO_TARGET',a.organization_id," +
+                "'LEGACY_RECORDED','','',mc.created_by_uid,mc.created_at,mc.updated_at,mc.deleted,'LOCAL_ONLY' " +
+                "FROM member_connections mc JOIN memberships m ON m.member_id=mc.member_id " +
+                "JOIN appointments a ON a.id=mc.appointment_id " +
+                "WHERE mc.appointment_id=? AND mc.deleted=0 AND m.person_id<>?",
+                new Object[]{personId,appointmentId,personId});
+            int migrated;
+            try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM member_connections WHERE appointment_id=? AND deleted=0", new String[]{appointmentId})) {
+                migrated = c.moveToFirst() ? c.getInt(0) : 0;
+            }
+            logChange(db, "legacy_connection_resolution", appointmentId, "MATCH", now);
+            db.setTransactionSuccessful();
+            return migrated;
+        } finally {
+            db.endTransaction();
+        }
+    }
+
     /** Create an independent person identity; this does not create parish membership or an app account. */
     public String addPersonIdentity(String fullName, String phone, String email) {
         String name = fullName == null ? "" : fullName.trim();
