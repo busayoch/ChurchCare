@@ -19,13 +19,14 @@ Implemented in `MemberDatabase`:
 - Legacy links whose appointment cannot be matched uniquely remain visible as `LEGACY_UNRESOLVED`; the original records are retained.
 - People & Connections now uses independent people records, with add/search by name, phone or email and proposals for overseer, responsibility, colleague and other relationships.
 - Connection proposals now optionally select a current appointment for each endpoint, independently; person-level relationships remain supported.
+- New appointments are linked to an independent person identity automatically; an exact unique existing name is reused, a new local person identity is created when none exists, and duplicate-name ambiguity is rejected rather than guessed.
 - Database validation rejects an appointment endpoint that is not current or does not belong to the person at that endpoint.
 - Relationship listings show the selected role and organisational unit at both ends, so multi-appointment context is visible.
 - An overseer relationship is stored from overseer to the person being overseen; colleague relationships are marked bidirectional.
 - The UI clearly describes proposals as local-only and does not claim recipient acceptance.
 - The local acceptance API now refuses to mark a relationship accepted based only on a caller-supplied UID.
 
-**Not implemented yet:** recipient-facing invitation acceptance, secure cross-device invitation delivery, identity claiming/merging, legacy-unresolved manual matching, scoped permission enforcement, or formal institutional verification. Appointment-specific selection is now available in the connection proposal UI, but full multi-appointment lifecycle and migration/backup testing remain pending. Firestore remains deny-all and no cloud sync has been enabled. Build #92 passed with the relationship-direction and legacy-link migration refinements. The appointment-aware changes committed after #92 are awaiting their own build verification.
+**Not implemented yet:** recipient-facing invitation acceptance, secure cross-device invitation delivery, identity claiming/merging, legacy-unresolved manual matching, scoped permission enforcement, or formal institutional verification. Appointment-specific selection is now available in the connection proposal UI, and new appointments are linked to person identities. Full multi-appointment lifecycle and migration/backup testing remain pending. Firestore remains deny-all and no cloud sync has been enabled. Build #92 passed with the relationship-direction and legacy-link migration refinements. The appointment-aware changes committed after #92 are awaiting their own build verification.
 
 
 **Repository:** busayoch/ChurchCare  
