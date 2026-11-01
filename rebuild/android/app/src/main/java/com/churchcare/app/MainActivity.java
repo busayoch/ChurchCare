@@ -1377,7 +1377,9 @@ public final class MainActivity extends Activity {
         base(title,description);
         final EditText search;
         if(table.equals("members")){
-            search=new EditText(this); search.setSingleLine(true); search.setHint("Type a name or phone number");
+            search=new EditText(this); search.setSingleLine(true);
+            search.setHint("Search name, phone, email, branch or address");
+            search.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
             root.addView(search);
         } else search=null;
         Button add=new Button(this); add.setText(table.equals("members")?"＋ Add a member":"＋ Add "+singular(table)); add.setAllCaps(false);
@@ -1385,9 +1387,18 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         if(search!=null){
-            Button find=new Button(this); find.setText("Find member"); find.setAllCaps(false);
-            find.setOnClickListener(v->renderInto(table,list,search.getText().toString()));
-            root.addView(find,root.indexOfChild(scroll));
+            TextView resultHint=new TextView(this);
+            resultHint.setText("Results update as you type.");
+            resultHint.setTextColor(muted); resultHint.setTextSize(12);
+            root.addView(resultHint,root.indexOfChild(scroll));
+            search.addTextChangedListener(new android.text.TextWatcher(){
+                @Override public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+                @Override public void onTextChanged(CharSequence s,int start,int before,int count){
+                    renderInto(table,list,s.toString());
+                    resultHint.setText(s.length()==0?"Showing all members":"Matching members for: "+s);
+                }
+                @Override public void afterTextChanged(android.text.Editable e){}
+            });
             search.setOnEditorActionListener((v,action,event)->{renderInto(table,list,search.getText().toString());return true;});
         }
         renderInto(table,list,"");
@@ -1427,10 +1438,100 @@ public final class MainActivity extends Activity {
                 TextView actions=new TextView(this); actions.setText("Tap for details and actions"); actions.setTextSize(11); actions.setTextColor(blue); actions.setPadding(0,dp(7),0,0); textColumn.addView(actions);
                 heading.addView(textColumn,new LinearLayout.LayoutParams(0,-2,1)); card.addView(heading);
                 ContentValues snapshot=new ContentValues(); for(int i=0;i<c.getColumnCount();i++){if(!c.isNull(i)) snapshot.put(c.getColumnName(i),c.getString(i));}
-                card.setOnClickListener(v->showRecordActions(table,id,snapshot));
+                card.setOnClickListener(v->{
+                    if(table.equals("members")) showMemberProfile(id,snapshot);
+                    else showRecordActions(table,id,snapshot);
+                });
                 list.addView(card);
             } while(c.moveToNext());
         } finally { c.close(); }
+    }
+
+    /** Dedicated member profile with clear contact, membership and care actions. */
+    private void showMemberProfile(String id,ContentValues member) {
+        base(safe(member,"full_name"),"Member profile • "+safe(member,"status"));
+        ScrollView scroll=new ScrollView(this);
+        LinearLayout page=new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(dp(4),dp(4),dp(4),dp(14)); scroll.addView(page);
+        String photoPath=safe(member,"profile_photo_path");
+        ImageView portrait=new ImageView(this);
+        portrait.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        portrait.setBackgroundColor(0xFFE8EEF3);
+        LinearLayout.LayoutParams portraitParams=new LinearLayout.LayoutParams(dp(116),dp(116));
+        portraitParams.gravity=Gravity.CENTER_HORIZONTAL;
+        portraitParams.bottomMargin=dp(12);
+        if(!photoPath.isEmpty()) {
+            try {
+                Bitmap bitmap=photoPath.startsWith("/")?BitmapFactory.decodeFile(photoPath):null;
+                if(bitmap!=null) portrait.setImageBitmap(bitmap);
+                else portrait.setImageResource(android.R.drawable.ic_menu_camera);
+            } catch(Exception ignored) { portrait.setImageResource(android.R.drawable.ic_menu_camera); }
+        } else portrait.setImageResource(android.R.drawable.ic_menu_camera);
+        page.addView(portrait,portraitParams);
+        TextView name=new TextView(this); name.setText(safe(member,"full_name"));
+        name.setTextSize(21); name.setTypeface(null,1); name.setTextColor(blue); name.setGravity(Gravity.CENTER);
+        page.addView(name);
+        TextView status=new TextView(this); status.setText("Membership status: "+(safe(member,"status").isEmpty()?"Not specified":safe(member,"status")));
+        status.setTextColor(muted); status.setGravity(Gravity.CENTER); status.setPadding(0,dp(4),0,dp(14)); page.addView(status);
+
+        addProfileSection(page,"Contact information");
+        addProfileValue(page,"Phone number",safe(member,"phone"));
+        addProfileValue(page,"Email address",safe(member,"email"));
+        addProfileValue(page,"Home address / area",safe(member,"address"));
+        addProfileSection(page,"Church membership");
+        addProfileValue(page,"Branch or group",safe(member,"organization"));
+        addProfileValue(page,"Membership status",safe(member,"status"));
+        addProfileSection(page,"Profile photos");
+        addProfileValue(page,"Additional photos",join(
+            safe(member,"extra_photo_one_path").isEmpty()?"":"Additional photo 1 saved",
+            safe(member,"extra_photo_two_path").isEmpty()?"":"Additional photo 2 saved"));
+
+        Button edit=new Button(this); edit.setText("Edit member details"); edit.setAllCaps(false);
+        edit.setOnClickListener(v->showForm("members",id,member)); page.addView(edit);
+        Button visit=new Button(this); visit.setText("Record a visit for this member"); visit.setAllCaps(false);
+        visit.setOnClickListener(v->{
+            ContentValues preset=new ContentValues(); preset.put("member_name",safe(member,"full_name"));
+            showForm("visits",null,preset);
+        }); page.addView(visit);
+        Button care=new Button(this); care.setText("Record a care need for this member"); care.setAllCaps(false);
+        care.setOnClickListener(v->{
+            ContentValues preset=new ContentValues(); preset.put("member_name",safe(member,"full_name"));
+            showForm("care_records",null,preset);
+        }); page.addView(care);
+        Button changePhoto=new Button(this); changePhoto.setText("Change profile photo"); changePhoto.setAllCaps(false);
+        changePhoto.setOnClickListener(v->{
+            photoRecordId=id; photoColumn="profile_photo_path";
+            Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("image/*"); intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+            startActivityForResult(intent,PICK_MEMBER_PHOTO);
+        }); page.addView(changePhoto);
+        Button archive=new Button(this); archive.setText("Archive member"); archive.setAllCaps(false);
+        archive.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Archive this member?")
+            .setMessage("The member will be hidden from the normal directory but retained in your church information.")
+            .setNegativeButton("Cancel",null).setPositiveButton("Archive",(d,w)->{
+                database.softDelete("members",id); showRecords("members");
+                Toast.makeText(this,"Member archived",Toast.LENGTH_SHORT).show();
+            }).show()); page.addView(archive);
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+    }
+
+    private void addProfileSection(LinearLayout page,String title) {
+        TextView heading=new TextView(this); heading.setText(title); heading.setTextColor(blue);
+        heading.setTextSize(16); heading.setTypeface(null,1);
+        heading.setPadding(dp(10),dp(12),dp(10),dp(5));
+        page.addView(heading);
+    }
+
+    private void addProfileValue(LinearLayout page,String label,String value) {
+        if(value==null||value.trim().isEmpty()) value="Not provided";
+        LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(dp(12),dp(8),dp(12),dp(8)); row.setBackgroundColor(0xFFFFFFFF);
+        TextView key=new TextView(this); key.setText(label); key.setTextSize(11); key.setTextColor(muted);
+        row.addView(key);
+        TextView val=new TextView(this); val.setText(value); val.setTextSize(15); val.setTextColor(ink);
+        row.addView(val);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2); params.bottomMargin=dp(3);
+        page.addView(row,params);
     }
 
     private void showRecordActions(String table,String id,ContentValues data) {
