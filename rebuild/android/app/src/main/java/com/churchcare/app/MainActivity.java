@@ -109,9 +109,12 @@ public final class MainActivity extends Activity {
     };
     private static final Field[] DELEGATION = {
         new Field("Responsible overseer", "overseer", TEXT, true),
+        new Field("Overseer Firebase UID (optional)", "overseer_uid", InputType.TYPE_CLASS_TEXT, false),
         new Field("Delegate name", "delegate_name", TEXT, true),
+        new Field("Delegate Firebase UID (optional)", "delegate_uid", InputType.TYPE_CLASS_TEXT, false),
         new Field("Church branch / unit", "organization_name", TEXT, false),
         new Field("Granted scope / authority", "scope", TEXT, true),
+        new Field("Permission keys (JSON array; optional)", "permissions_json", InputType.TYPE_CLASS_TEXT, false),
         new Field("Start date (YYYY-MM-DD)", "start_date", DATE, false),
         new Field("End date (optional)", "end_date", DATE, false),
         new Field("Status (Active / Ended)", "status", TEXT, false),
@@ -414,7 +417,7 @@ public final class MainActivity extends Activity {
         Button add=new Button(this); add.setText("+ Add leadership appointment"); add.setAllCaps(false);
         add.setOnClickListener(v->showForm("appointments",null,null)); root.addView(add);
         Button delegates=new Button(this); delegates.setText("Manage pastoral delegates"); delegates.setAllCaps(false);
-        delegates.setOnClickListener(v->showRecords("delegations")); root.addView(delegates);
+        delegates.setOnClickListener(v->showPastoralDelegates()); root.addView(delegates);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         try(Cursor c=database.listCurrentGovernanceAppointments()) {
@@ -431,6 +434,44 @@ public final class MainActivity extends Activity {
                 item.setOnClickListener(v->showReportingManagement(id,person,role));
                 LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(5); list.addView(item,p);
             } while(c.moveToNext());
+        }
+    }
+
+    /** Dedicated local interface for pastoral delegation identity, scope and status. */
+    private void showPastoralDelegates() {
+        base("Pastoral delegates","Record who has been entrusted with oversight, and the scope and duration of that delegation");
+        TextView note=new TextView(this);
+        note.setText("Delegations are recorded locally. Firebase UIDs identify the overseer and delegate where available. A delegation record does not yet grant access to member or care records, and no cloud permissions are enabled.");
+        note.setTextColor(muted); note.setTextSize(13); note.setPadding(dp(12),dp(10),dp(12),dp(10)); note.setBackgroundColor(0xFFFFFFFF); root.addView(note);
+        Button add=new Button(this); add.setText("+ Record pastoral delegation"); add.setAllCaps(false);
+        add.setOnClickListener(v->showForm("delegations",null,null)); root.addView(add);
+        ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        try(Cursor c=database.listRecords("delegations")) {
+            boolean found=false;
+            while(c.moveToNext()) {
+                found=true;
+                String id=get(c,"id"), overseer=get(c,"overseer"), delegate=get(c,"delegate_name");
+                String scope=get(c,"scope"), status=get(c,"status"), orgId=get(c,"organization_id");
+                String org=orgId.isEmpty()?"Church-wide / unspecified":database.findNameById("organizations",orgId);
+                Button item=new Button(this); item.setAllCaps(false); item.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+                item.setText(overseer+" → "+delegate+"\n"+scope+"\n"+org+" • "+status+"\nTap to review or edit");
+                item.setOnClickListener(v->{
+                    ContentValues snapshot=new ContentValues();
+                    try(Cursor rows=database.listRecords("delegations")) {
+                        while(rows.moveToNext()) if(id.equals(get(rows,"id"))) {
+                            for(int i=0;i<rows.getColumnCount();i++) if(!rows.isNull(i)) snapshot.put(rows.getColumnName(i),rows.getString(i));
+                            break;
+                        }
+                    }
+                    if(snapshot.size()>0) new AlertDialog.Builder(this).setTitle("Pastoral delegation")
+                        .setMessage(overseer+" → "+delegate+"\n\nScope: "+scope+"\nOrganisation: "+org+"\nStatus: "+status+"\n\nOverseer UID: "+safe(snapshot,"overseer_uid")+"\nDelegate UID: "+safe(snapshot,"delegate_uid")+"\nPermissions: "+safe(snapshot,"permissions_json"))
+                        .setPositiveButton("Edit",(d,w)->showForm("delegations",id,snapshot))
+                        .setNegativeButton("Close",null).show();
+                });
+                LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(5); list.addView(item,p);
+            }
+            if(!found){TextView empty=new TextView(this);empty.setText("No pastoral delegations recorded yet.");empty.setTextColor(muted);empty.setPadding(dp(12),dp(18),dp(12),dp(18));list.addView(empty);}
         }
     }
 
@@ -600,6 +641,23 @@ public final class MainActivity extends Activity {
             }
             LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.bottomMargin=dp(4); form.addView(e,p); inputs[i]=e;
         }
+        if (table.equals("delegations")) {
+            Button useAsDelegate = new Button(this);
+            useAsDelegate.setText("Use my signed-in account as delegate");
+            useAsDelegate.setAllCaps(false);
+            useAsDelegate.setOnClickListener(v -> {
+                FirebaseUser current=FirebaseAuth.getInstance().getCurrentUser();
+                if(current==null){Toast.makeText(this,"Sign in with Google first from Settings / Account.",Toast.LENGTH_LONG).show();return;}
+                for(int i=0;i<fields.length;i++){
+                    if("delegate_uid".equals(fields[i].key)) inputs[i].setText(current.getUid());
+                    if("delegate_name".equals(fields[i].key) && inputs[i].getText().toString().trim().isEmpty() && current.getDisplayName()!=null) inputs[i].setText(current.getDisplayName());
+                }
+            });
+            form.addView(useAsDelegate);
+            TextView delegationIdentityNote=new TextView(this);
+            delegationIdentityNote.setText("The signed-in user is recorded as the grantor automatically. Link the overseer and delegate UIDs where available; identity linking does not activate permissions.");
+            delegationIdentityNote.setTextColor(muted); delegationIdentityNote.setTextSize(12); form.addView(delegationIdentityNote);
+        }
         if (table.equals("appointments")) {
             Button useAccount = new Button(this);
             useAccount.setText("Use my signed-in Firebase account");
@@ -650,10 +708,11 @@ public final class MainActivity extends Activity {
                         savedId = editId;
                     }
                     int reportingLinks = 0;
-                    if (table.equals("appointments")) reportingLinks = database.refreshAllAutomaticFollowUpReporting();
+                    if (table.equals("appointments") || table.equals("organizations"))
+                        reportingLinks = database.refreshAllAutomaticFollowUpReporting();
                     if(table.equals("visits")) database.trimVisits(values.getAsString("member_name"));
                     String saveMessage = "Saved on this device";
-                    if (table.equals("appointments") && reportingLinks > 0)
+                    if ((table.equals("appointments") || table.equals("organizations")) && reportingLinks > 0)
                         saveMessage += ". " + reportingLinks + " automatic Follow-up reporting link(s) updated";
                     Toast.makeText(this,saveMessage,Toast.LENGTH_LONG).show(); showRecords(table);
                 } catch(Exception e){android.util.Log.e("ChurchCare","Save failed",e);Toast.makeText(this,"Could not save. Check the details and try again.",Toast.LENGTH_LONG).show();}
@@ -767,6 +826,9 @@ public final class MainActivity extends Activity {
                 }
                 FirebaseUser actor = FirebaseAuth.getInstance().getCurrentUser();
                 if (actor != null) v.put("appointed_by_uid", actor.getUid());
+            } else {
+                FirebaseUser actor = FirebaseAuth.getInstance().getCurrentUser();
+                if (actor != null) v.put("granted_by_uid", actor.getUid());
             }
         } else if(table.equals("visits")||table.equals("care_records")){
             String member=v.getAsString("member_name"); if(member!=null) v.put("member_id",database.findIdByName("members","full_name",member));
