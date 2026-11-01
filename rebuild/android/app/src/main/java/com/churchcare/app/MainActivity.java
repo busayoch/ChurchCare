@@ -668,15 +668,18 @@ public final class MainActivity extends Activity {
         add.setOnClickListener(v->showForm("delegations",null,null)); root.addView(add);
         ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list); root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        try(Cursor c=database.listRecords("delegations")) {
+        try(Cursor c=database.listPastoralDelegationAppointmentLinks()) {
             boolean found=false;
             while(c.moveToNext()) {
                 found=true;
                 String id=get(c,"id"), overseer=get(c,"overseer"), delegate=get(c,"delegate_name");
                 String scope=get(c,"scope"), status=get(c,"status"), orgId=get(c,"organization_id");
                 String org=orgId.isEmpty()?"Church-wide / unspecified":database.findNameById("organizations",orgId);
+                String overseerLink=delegationAppointmentStatus(c,"overseer");
+                String delegateLink=delegationAppointmentStatus(c,"delegate");
                 Button item=new Button(this); item.setAllCaps(false); item.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-                item.setText(overseer+" → "+delegate+"\n"+scope+"\n"+org+" • "+status+"\nTap to review or edit");
+                item.setText(overseer+" → "+delegate+"\n"+scope+"\n"+org+" • "+status+
+                    "\nOverseer: "+overseerLink+"\nDelegate: "+delegateLink+"\nTap to review or edit");
                 item.setOnClickListener(v->{
                     ContentValues snapshot=new ContentValues();
                     try(Cursor rows=database.listRecords("delegations")) {
@@ -686,7 +689,10 @@ public final class MainActivity extends Activity {
                         }
                     }
                     if(snapshot.size()>0) new AlertDialog.Builder(this).setTitle("Pastoral delegation")
-                        .setMessage(overseer+" → "+delegate+"\n\nScope: "+scope+"\nOrganisation: "+org+"\nStatus: "+status+"\n\nOverseer UID: "+safe(snapshot,"overseer_uid")+"\nDelegate UID: "+safe(snapshot,"delegate_uid")+"\nPermissions: "+safe(snapshot,"permissions_json"))
+                        .setMessage(overseer+" → "+delegate+"\n\nScope: "+scope+"\nOrganisation: "+org+"\nStatus: "+status+
+                            "\n\nOverseer UID: "+safe(snapshot,"overseer_uid")+"\nDelegate UID: "+safe(snapshot,"delegate_uid")+
+                            "\nPermissions: "+safe(snapshot,"permissions_json")+
+                            "\n\nAppointment matching is informational only. Multiple matches are not auto-selected and this does not grant access.")
                         .setPositiveButton("Edit",(d,w)->showForm("delegations",id,snapshot))
                         .setNegativeButton("Close",null).show();
                 });
@@ -694,6 +700,18 @@ public final class MainActivity extends Activity {
             }
             if(!found){TextView empty=new TextView(this);empty.setText("No pastoral delegations recorded yet.");empty.setTextColor(muted);empty.setPadding(dp(12),dp(18),dp(12),dp(18));list.addView(empty);}
         }
+    }
+
+    private String delegationAppointmentStatus(Cursor row,String endpoint) {
+        String uid=get(row,endpoint+"_uid");
+        int count=0;
+        String label="";
+        try { count=row.getInt(row.getColumnIndexOrThrow(endpoint+"_appointment_count")); } catch(Exception ignored) {}
+        try { label=get(row,endpoint+"_appointment_label"); } catch(Exception ignored) {}
+        if(uid.isEmpty()) return "no Firebase UID linked";
+        if(count==0) return "no current appointment matched to UID";
+        if(count>1) return "ambiguous — "+count+" current appointments match this UID";
+        return label.isEmpty()?"one current appointment matched":label;
     }
 
     private void showReportingManagement(String appointmentId,String personName,String role) {
