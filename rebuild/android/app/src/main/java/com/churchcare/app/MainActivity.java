@@ -1,5 +1,6 @@
 package com.churchcare.app;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentValues;
@@ -26,6 +27,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.os.Bundle;
+import android.os.Build;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -76,9 +78,12 @@ public final class MainActivity extends Activity {
     private static final int PICK_MEMBER_PHOTO = 7104;
     private static final int PICK_MEMBER_CONTACT = 7109;
     private static final int IMPORT_MEMBER_XLSX = 7110;
+    private static final int REQUEST_CONTACTS_PERMISSION = 7112;
     private static final int EXPORT_MEMBER_TEMPLATE = 7111;
     private EditText memberNameInput;
     private EditText memberPhoneInput;
+    private EditText memberEmailInput;
+    private EditText memberAddressInput;
     private TextView memberPhotoStatus;
     private String pendingMemberPhotoPath = "";
     private static final int EXPORT_BACKUP = 7105;
@@ -101,6 +106,7 @@ public final class MainActivity extends Activity {
     private static final Field[] MEMBER = {
         new Field("Full name", "full_name", InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS, true),
         new Field("Phone number", "phone", PHONE, false),
+        new Field("Email address", "email", InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, false),
         new Field("Church branch / unit", "organization", TEXT, false),
         new Field("Address / location", "address", TEXT, false),
         new Field("Status (Active / Inactive)", "status", TEXT, false)
@@ -787,8 +793,8 @@ public final class MainActivity extends Activity {
      * relationship-ID validation are retained; this only changes presentation.
      */
     private void showMemberRegistration() {
-        memberNameInput=null; memberPhoneInput=null; memberPhotoStatus=null; pendingMemberPhotoPath="";
-        base("Add a member", "Add one person at a time, import a saved contact, or bring in a prepared Excel list.");
+        memberNameInput=null; memberPhoneInput=null; memberEmailInput=null; memberAddressInput=null; memberPhotoStatus=null; pendingMemberPhotoPath="";
+        base("Add a member", "Add one person at a time, import saved contacts, or bring in a prepared Excel list.");
         ScrollView scroll=new ScrollView(this);
         LinearLayout form=new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(16),dp(8),dp(16),dp(16)); scroll.addView(form);
@@ -806,6 +812,8 @@ public final class MainActivity extends Activity {
                     .setPositiveButton("OK",null).show();
             }
         }); form.addView(contact);
+        Button multipleContacts=new Button(this); multipleContacts.setAllCaps(false); multipleContacts.setText("Select multiple phone contacts");
+        multipleContacts.setOnClickListener(v->requestMultipleContactImport()); form.addView(multipleContacts);
         Button excel=new Button(this); excel.setAllCaps(false); excel.setText("Import members from Excel");
         excel.setOnClickListener(v->{
             Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT); pick.addCategory(Intent.CATEGORY_OPENABLE);
@@ -821,7 +829,7 @@ public final class MainActivity extends Activity {
             startActivityForResult(save,EXPORT_MEMBER_TEMPLATE);
         }); form.addView(template);
         TextView importHelp=new TextView(this);
-        importHelp.setText("Excel import accepts .xlsx files. Review the member list before saving; the import is added as one transaction so a failed batch will not leave a partial list.");
+        importHelp.setText("Excel import accepts .xlsx files. Review the member list before saving; a failed batch will not leave a partial list. Selecting multiple phone contacts asks for contact access only when you use that option.");
         importHelp.setTextColor(muted); importHelp.setTextSize(12); importHelp.setPadding(0,dp(4),0,dp(12)); form.addView(importHelp);
 
         TextView identityTitle=new TextView(this); identityTitle.setText("1. Person's details");
@@ -833,6 +841,8 @@ public final class MainActivity extends Activity {
         name.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS); form.addView(name);
         EditText phone=new EditText(this); memberPhoneInput=phone; phone.setSingleLine(true); phone.setHint("Phone number (optional)");
         phone.setInputType(PHONE); form.addView(phone);
+        EditText email=new EditText(this); memberEmailInput=email; email.setSingleLine(true); email.setHint("Email address (optional)");
+        email.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS); form.addView(email);
         TextView photoStatus=new TextView(this); memberPhotoStatus=photoStatus;
         photoStatus.setText("No contact photo selected"); photoStatus.setTextColor(muted); photoStatus.setTextSize(12); form.addView(photoStatus);
 
@@ -843,7 +853,7 @@ public final class MainActivity extends Activity {
         connectionHelp.setTextColor(muted); connectionHelp.setPadding(0,dp(4),0,dp(8)); form.addView(connectionHelp);
         EditText organization=new EditText(this); organization.setSingleLine(true); organization.setHint("Choose a church branch or group");
         configureRelationshipPicker("members","organization",organization); form.addView(organization);
-        EditText address=new EditText(this); address.setHint("Address or area (optional)");
+        EditText address=new EditText(this); memberAddressInput=address; address.setHint("Address or area (optional)");
         address.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS); form.addView(address);
         final String[] status={"Active"};
         Button statusButton=new Button(this); statusButton.setAllCaps(false); statusButton.setText("Member status: Active");
@@ -860,6 +870,7 @@ public final class MainActivity extends Activity {
             ContentValues values=new ContentValues();
             values.put("full_name",fullName);
             values.put("phone",phone.getText().toString().trim());
+            values.put("email",email.getText().toString().trim());
             values.put("organization",organization.getText().toString().trim());
             values.put("address",address.getText().toString().trim());
             values.put("status",status[0]);
@@ -923,10 +934,161 @@ public final class MainActivity extends Activity {
         if(memberNameInput==null||memberPhoneInput==null) { showMemberRegistration(); }
         if(memberNameInput!=null&&!displayName.trim().isEmpty()) memberNameInput.setText(displayName.trim());
         if(memberPhoneInput!=null&&!number.trim().isEmpty()) memberPhoneInput.setText(number.trim());
+        String email=readFirstContactValue(ContactsContract.CommonDataKinds.Email.CONTENT_URI,
+            ContactsContract.CommonDataKinds.Email.CONTACT_ID,ContactsContract.CommonDataKinds.Email.ADDRESS,contactId);
+        String address=readFirstContactValue(ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_URI,
+            ContactsContract.CommonDataKinds.StructuredPostal.CONTACT_ID,ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS,contactId);
+        if(memberEmailInput!=null&&!email.isEmpty()) memberEmailInput.setText(email);
+        if(memberAddressInput!=null&&!address.isEmpty()) memberAddressInput.setText(address);
         pendingMemberPhotoPath=saveContactPhoto(contactId);
         if(memberPhotoStatus!=null) memberPhotoStatus.setText(pendingMemberPhotoPath.isEmpty()
             ?"Contact details imported; no photo was available":"Contact photo imported and will be saved as the member thumbnail");
         Toast.makeText(this,"Contact details added to the member form",Toast.LENGTH_SHORT).show();
+    }
+
+    private String readFirstContactValue(Uri contentUri,String contactIdColumn,String valueColumn,long contactId) {
+        if(contactId<=0) return "";
+        try(Cursor cursor=getContentResolver().query(contentUri,new String[]{valueColumn},contactIdColumn+"=?",
+                new String[]{String.valueOf(contactId)},null)) {
+            if(cursor!=null&&cursor.moveToFirst()) {
+                String value=cursor.getString(0);
+                return value==null?"":value.trim();
+            }
+        } catch(Exception error) {
+            android.util.Log.w("ChurchCare","Optional contact detail was unavailable",error);
+        }
+        return "";
+    }
+
+    private static final class ContactImportEntry {
+        final long id;
+        final String name,phone,email,address;
+        ContactImportEntry(long id,String name,String phone,String email,String address) {
+            this.id=id; this.name=name==null?"":name; this.phone=phone==null?"":phone;
+            this.email=email==null?"":email; this.address=address==null?"":address;
+        }
+        String label() {
+            String detail=!phone.isEmpty()?phone:!email.isEmpty()?email:address;
+            return detail.isEmpty()?name:name+" • "+detail;
+        }
+    }
+
+    private void requestMultipleContactImport() {
+        if(Build.VERSION.SDK_INT>=23 && checkSelfPermission(Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.READ_CONTACTS},REQUEST_CONTACTS_PERMISSION);
+        } else showMultipleContactPicker();
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode,permissions,grantResults);
+        if(requestCode==REQUEST_CONTACTS_PERMISSION) {
+            if(grantResults.length>0 && grantResults[0]==PackageManager.PERMISSION_GRANTED) showMultipleContactPicker();
+            else new AlertDialog.Builder(this).setTitle("Contacts permission not granted")
+                .setMessage("ChurchCare can still add one contact using the phone's contact picker. Allow contact access if you want to select several contacts together.")
+                .setPositiveButton("OK",null).show();
+        }
+    }
+
+    private Map<Long,String> readContactValues(Uri uri,String idColumn,String valueColumn) {
+        Map<Long,String> values=new HashMap<>();
+        try(Cursor cursor=getContentResolver().query(uri,new String[]{idColumn,valueColumn},null,null,null)) {
+            if(cursor!=null) while(cursor.moveToNext()) {
+                long id=cursor.getLong(0);
+                String value=cursor.getString(1);
+                if(id>0 && value!=null && !value.trim().isEmpty() && !values.containsKey(id))
+                    values.put(id,value.trim());
+            }
+        }
+        return values;
+    }
+
+    private void showMultipleContactPicker() {
+        try {
+            Map<Long,String> phones=readContactValues(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                ContactsContract.CommonDataKinds.Phone.CONTACT_ID,ContactsContract.CommonDataKinds.Phone.NUMBER);
+            Map<Long,String> emails=readContactValues(ContactsContract.CommonDataKinds.Email.CONTENT_URI,
+                ContactsContract.CommonDataKinds.Email.CONTACT_ID,ContactsContract.CommonDataKinds.Email.ADDRESS);
+            Map<Long,String> addresses=readContactValues(ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_URI,
+                ContactsContract.CommonDataKinds.StructuredPostal.CONTACT_ID,ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS);
+            ArrayList<ContactImportEntry> contacts=new ArrayList<>();
+            try(Cursor cursor=getContentResolver().query(ContactsContract.Contacts.CONTENT_URI,
+                    new String[]{ContactsContract.Contacts._ID,ContactsContract.Contacts.DISPLAY_NAME},
+                    null,null,ContactsContract.Contacts.DISPLAY_NAME+" COLLATE NOCASE ASC")) {
+                if(cursor!=null) while(cursor.moveToNext()) {
+                    long id=cursor.getLong(0);
+                    String name=cursor.getString(1);
+                    if(name==null||name.trim().isEmpty()) continue;
+                    contacts.add(new ContactImportEntry(id,name,phones.get(id),emails.get(id),addresses.get(id)));
+                }
+            }
+            if(contacts.isEmpty()) {
+                new AlertDialog.Builder(this).setTitle("No contacts found")
+                    .setMessage("There are no saved phone contacts available to import.")
+                    .setPositiveButton("OK",null).show(); return;
+            }
+            String[] labels=new String[contacts.size()];
+            boolean[] selected=new boolean[contacts.size()];
+            for(int i=0;i<contacts.size();i++) labels[i]=contacts.get(i).label();
+            new AlertDialog.Builder(this).setTitle("Select contacts to add")
+                .setMultiChoiceItems(labels,selected,(dialog,which,checked)->selected[which]=checked)
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Review selected",(dialog,which)->{
+                    ArrayList<ContactImportEntry> chosen=new ArrayList<>();
+                    for(int i=0;i<contacts.size();i++) if(selected[i]) chosen.add(contacts.get(i));
+                    if(chosen.isEmpty()) {
+                        Toast.makeText(this,"No contacts selected.",Toast.LENGTH_SHORT).show(); return;
+                    }
+                    reviewMultipleContacts(chosen);
+                }).show();
+        } catch(Exception error) {
+            android.util.Log.e("ChurchCare","Could not load phone contacts",error);
+            new AlertDialog.Builder(this).setTitle("Contacts unavailable")
+                .setMessage("ChurchCare could not read the contacts on this phone. You can still add a single contact or use Excel import.")
+                .setPositiveButton("OK",null).show();
+        }
+    }
+
+    private void reviewMultipleContacts(ArrayList<ContactImportEntry> chosen) {
+        StringBuilder summary=new StringBuilder();
+        summary.append(chosen.size()).append(" contact(s) selected. ChurchCare will import the available name, phone, email, address and photo details.");
+        summary.append("\n\n");
+        for(int i=0;i<Math.min(12,chosen.size());i++) summary.append("• ").append(chosen.get(i).name).append("\n");
+        if(chosen.size()>12) summary.append("… and ").append(chosen.size()-12).append(" more");
+        summary.append("\nNo branch will be assigned automatically; you can link members to a branch after import.");
+        new AlertDialog.Builder(this).setTitle("Review contact import").setMessage(summary.toString())
+            .setNegativeButton("Go back",null)
+            .setPositiveButton("Add "+chosen.size()+" members",(dialog,which)->saveMultipleContacts(chosen)).show();
+    }
+
+    private void saveMultipleContacts(ArrayList<ContactImportEntry> chosen) {
+        ArrayList<ContentValues> batch=new ArrayList<>();
+        ArrayList<String> savedPhotos=new ArrayList<>();
+        try {
+            for(ContactImportEntry contact:chosen) {
+                ContentValues values=new ContentValues();
+                values.put("full_name",contact.name.trim());
+                values.put("phone",contact.phone);
+                values.put("email",contact.email);
+                values.put("address",contact.address);
+                values.put("organization","");
+                values.put("status","Active");
+                values.putNull("organization_id");
+                String photo=saveContactPhoto(contact.id);
+                if(!photo.isEmpty()) { values.put("profile_photo_path",photo); savedPhotos.add(photo); }
+                batch.add(values);
+            }
+            int count=database.insertMembersBatch(batch);
+            new AlertDialog.Builder(this).setTitle("Contacts imported")
+                .setMessage(count+" member(s) were added. Available contact photos were saved as profile thumbnails.")
+                .setPositiveButton("View members",(d,w)->showRecords("members"))
+                .setOnCancelListener(d->showRecords("members")).show();
+        } catch(Exception error) {
+            for(String path:savedPhotos) try { new File(path).delete(); } catch(Exception ignored) {}
+            android.util.Log.e("ChurchCare","Multiple contact import failed",error);
+            new AlertDialog.Builder(this).setTitle("Contact import not completed")
+                .setMessage("ChurchCare could not save this contact batch. No partial member import was kept.")
+                .setPositiveButton("OK",null).show();
+        }
     }
 
     private static final class MemberImportPreview {
@@ -1001,6 +1163,7 @@ public final class MainActivity extends Activity {
         ArrayList<String> headers=rows.get(0);
         int nameCol=findMemberHeader(headers,"fullname","name","membername");
         int phoneCol=findMemberHeader(headers,"phonenumber","phone","mobile","mobilenumber");
+        int emailCol=findMemberHeader(headers,"emailaddress","email","e-mail");
         int branchCol=findMemberHeader(headers,"branchunit","branch","unit","churchbranch","organization");
         int addressCol=findMemberHeader(headers,"addresslocation","address","location");
         int statusCol=findMemberHeader(headers,"status","memberstatus");
@@ -1021,6 +1184,7 @@ public final class MainActivity extends Activity {
             ContentValues values=new ContentValues();
             values.put("full_name",fullName);
             values.put("phone",cell(row,phoneCol));
+            values.put("email",cell(row,emailCol));
             values.put("organization",cell(row,branchCol));
             values.put("address",cell(row,addressCol));
             values.put("status",status.equalsIgnoreCase("inactive")?"Inactive":"Active");
@@ -1112,12 +1276,12 @@ public final class MainActivity extends Activity {
         writeZipText(zip,"xl/_rels/workbook.xml.rels",
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/></Relationships>");
         ArrayList<String[]> memberRows=new ArrayList<>();
-        memberRows.add(new String[]{"Full name *","Phone number","Branch / unit","Address / location","Status"});
+        memberRows.add(new String[]{"Full name *","Phone number","Email address","Branch / unit","Address / location","Status"});
         writeZipText(zip,"xl/worksheets/sheet1.xml",worksheetXml(memberRows));
         ArrayList<String[]> instructions=new ArrayList<>();
         instructions.add(new String[]{"ChurchCare member import template"});
         instructions.add(new String[]{"Enter one member on each row of the Members sheet."});
-        instructions.add(new String[]{"Full name is required. Phone number, branch, address and status are optional."});
+        instructions.add(new String[]{"Full name is required. Phone number, email, branch, address and status are optional."});
         instructions.add(new String[]{"Status must be Active or Inactive. If left blank, ChurchCare uses Active."});
         instructions.add(new String[]{"Do not rename or remove the column headings in row 1."});
         instructions.add(new String[]{"Branch / unit text is imported as supplied; choose a branch in the app to link it to a church record."});
@@ -1502,7 +1666,7 @@ public final class MainActivity extends Activity {
         return safe(v,"member_name")+" • "+safe(v,"category");
     }
     private String recordDetail(String table,Cursor c) {
-        if(table.equals("members"))return join(get(c,"phone"),get(c,"organization"),get(c,"status"),get(c,"address"));
+        if(table.equals("members"))return join(get(c,"phone"),get(c,"email"),get(c,"organization"),get(c,"status"),get(c,"address"));
         if(table.equals("organizations"))return join(get(c,"parent_id").isEmpty()?"No parent branch/unit linked yet":"Parent: "+database.findNameById("organizations",get(c,"parent_id")),get(c,"location"),get(c,"notes"));
         if(table.equals("appointments"))return join(get(c,"start_date")+" → "+(get(c,"end_date").isEmpty()?"Current":get(c,"end_date")),get(c,"status"),get(c,"notes"));
         if(table.equals("delegations"))return join("Responsibility: "+get(c,"scope"),get(c,"status"),get(c,"start_date")+" → "+get(c,"end_date"));
@@ -1510,7 +1674,7 @@ public final class MainActivity extends Activity {
         return join("Priority: "+get(c,"priority"),"Status: "+get(c,"status"),"Assigned: "+get(c,"assigned_to"),"Due: "+get(c,"due_date"),get(c,"details"),get(c,"resolution"));
     }
     private String recordDetail(String table,ContentValues v) {
-        if(table.equals("members"))return join(safe(v,"phone"),safe(v,"organization"),safe(v,"status"),safe(v,"address"),
+        if(table.equals("members"))return join(safe(v,"phone"),safe(v,"email"),safe(v,"organization"),safe(v,"status"),safe(v,"address"),
             safe(v,"profile_photo_path").isEmpty()?"":"Profile thumbnail saved",
             safe(v,"extra_photo_one_path").isEmpty()?"":"Local photo 1 saved",
             safe(v,"extra_photo_two_path").isEmpty()?"":"Local photo 2 saved");
