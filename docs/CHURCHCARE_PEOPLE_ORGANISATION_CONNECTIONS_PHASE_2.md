@@ -1,6 +1,6 @@
 # ChurchCare People, Organisation & Connections — Phase 2 Architecture
 
-**Status:** Architecture approved; SQLite v8 identity/relationship foundation and appointment-aware connection UI implemented; latest appointment-aware changes require a fresh Android build; migration verification and secure invitation transport remain pending  
+**Status:** Architecture approved; SQLite v8 identity/relationship foundation, appointment-aware connections and manual legacy matching implemented; latest changes require Android build verification; device migration testing and secure invitation transport remain pending  
 **Date:** 2026-11-01
 
 ## Implementation progress — first database milestone
@@ -16,7 +16,7 @@ Implemented in `MemberDatabase`:
 - Additive version-7-to-8 migration that backfills existing members into people and membership records, and links appointments only where an exact name match is unique.
 - Backup export/restore inclusion for the new tables. Legacy backups are still accepted; after restore, people/membership mappings are rebuilt from restored member records.
 - Existing member-to-leader connections are migrated into the new relationship view when the appointment can be matched to one unique person. These are labelled `LEGACY_RECORDED`, not falsely marked as independently accepted.
-- Legacy links whose appointment cannot be matched uniquely remain visible as `LEGACY_UNRESOLVED`; the original records are retained.
+- Legacy links whose appointment cannot be matched uniquely remain visible as `LEGACY_UNRESOLVED`; the original records are retained. A manual review screen now lists these appointments and lets the user explicitly match each one to an existing person. The appointment mapping and migrated `LEGACY_RECORDED` relationships are written atomically; original `member_connections` rows remain untouched. No relationship is marked accepted by this process.
 - People & Connections now uses independent people records, with add/search by name, phone or email and proposals for overseer, responsibility, colleague and other relationships.
 - Connection proposals now optionally select a current appointment for each endpoint, independently; person-level relationships remain supported.
 - New appointments are linked to an independent person identity automatically; an exact unique existing name is reused, a new local person identity is created when none exists, and duplicate-name ambiguity is rejected rather than guessed.
@@ -26,7 +26,7 @@ Implemented in `MemberDatabase`:
 - The UI clearly describes proposals as local-only and does not claim recipient acceptance.
 - The local acceptance API now refuses to mark a relationship accepted based only on a caller-supplied UID.
 
-**Not implemented yet:** recipient-facing invitation acceptance, secure cross-device invitation delivery, identity claiming/merging, legacy-unresolved manual matching, scoped permission enforcement, or formal institutional verification. Appointment-specific selection is now available in the connection proposal UI, and new appointments are linked to person identities. Full multi-appointment lifecycle and migration/backup testing remain pending. Firestore remains deny-all and no cloud sync has been enabled. Build #92 passed with the relationship-direction and legacy-link migration refinements. The appointment-aware changes committed after #92 are awaiting their own build verification.
+**Not implemented yet:** recipient-facing invitation acceptance, secure cross-device invitation delivery, identity claiming/merging, recipient-facing invitation acceptance, secure cross-device invitation delivery, identity claiming/merging, scoped permission enforcement, or formal institutional verification. Appointment-specific selection is now available in the connection proposal UI, and new appointments are linked to person identities. Full multi-appointment lifecycle and migration/backup testing remain pending. Firestore remains deny-all and no cloud sync has been enabled. Build #92 and the appointment-aware follow-up build #96 passed debug and signed-release compilation, signature verification and artifact uploads. Manual legacy matching has now been added and requires its own build verification.
 
 
 **Repository:** busayoch/ChurchCare  
