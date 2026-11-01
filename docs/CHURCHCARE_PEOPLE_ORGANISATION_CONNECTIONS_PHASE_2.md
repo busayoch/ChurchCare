@@ -1,6 +1,6 @@
 # ChurchCare People, Organisation & Connections — Phase 2 Architecture
 
-**Status:** Architecture approved; initial SQLite identity/relationship schema implemented; UI and invitation transport pending  
+**Status:** Architecture approved; SQLite v8 identity/relationship foundation and initial People & Connections UI implemented; migration verification and secure invitation transport remain pending  
 **Date:** 2026-11-01
 
 ## Implementation progress — first database milestone
@@ -15,10 +15,14 @@ Implemented in `MemberDatabase`:
 - `connection_invitations` local draft table, with explicit local-only status; it does not deliver invitations or create cross-device claims.
 - Additive version-7-to-8 migration that backfills existing members into people and membership records, and links appointments only where an exact name match is unique.
 - Backup export/restore inclusion for the new tables. Legacy backups are still accepted; after restore, people/membership mappings are rebuilt from restored member records.
+- Existing member-to-leader connections are migrated into the new relationship view when the appointment can be matched to one unique person. These are labelled `LEGACY_RECORDED`, not falsely marked as independently accepted.
+- Legacy links whose appointment cannot be matched uniquely remain visible as `LEGACY_UNRESOLVED`; the original records are retained.
+- People & Connections now uses independent people records, with add/search by name, phone or email and proposals for overseer, responsibility, colleague and other relationships.
+- An overseer relationship is stored from overseer to the person being overseen; colleague relationships are marked bidirectional.
+- The UI clearly describes proposals as local-only and does not claim recipient acceptance.
+- The local acceptance API now refuses to mark a relationship accepted based only on a caller-supplied UID.
 
-New local database methods provide independent person creation, proposed relationship creation, relationship listing and acceptance. These are data-layer foundations only; the existing People & connections screen has not yet been rebuilt to use them.
-
-**Not implemented yet:** recipient-facing invitation UI, secure cross-device invitation delivery, identity claiming/merging, complete multi-appointment user experience, scoped permission enforcement, or formal institutional verification. Firestore remains deny-all and no cloud sync has been enabled.
+**Not implemented yet:** recipient-facing invitation acceptance, secure cross-device invitation delivery, identity claiming/merging, appointment selection within the connection UI, complete multi-appointment workflow, scoped permission enforcement, or formal institutional verification. Firestore remains deny-all and no cloud sync has been enabled. The latest Android build passed before the subsequent relationship-direction and legacy-link migration refinements; those refinements are being rebuilt now.
 
 
 **Repository:** busayoch/ChurchCare  
