@@ -184,6 +184,29 @@ public final class MemberDatabase extends SQLiteOpenHelper {
         }
     }
 
+    public String churchStructureJson() {
+        try (Cursor c=getReadableDatabase().rawQuery("SELECT structure_json FROM church_profile WHERE id=1",null)) {
+            return c.moveToFirst()?c.getString(0):"[]";
+        }
+    }
+
+    /** Update only the adopted local structure guide; existing records and links are untouched. */
+    public void updateChurchStructure(String structureJson) {
+        if(structureJson==null) throw new IllegalArgumentException("A church structure is required.");
+        try {
+            org.json.JSONArray levels=new org.json.JSONArray(structureJson);
+            if(levels.length()==0) throw new IllegalArgumentException("Add at least one level.");
+            for(int i=0;i<levels.length();i++) if(levels.optString(i).trim().isEmpty())
+                throw new IllegalArgumentException("Church levels cannot be blank.");
+        } catch(org.json.JSONException error) { throw new IllegalArgumentException("The church structure is not valid.",error); }
+        ContentValues values=new ContentValues();
+        values.put("structure_json",structureJson);
+        values.put("configuration_version",1);
+        values.put("updated_at",System.currentTimeMillis());
+        int changed=getWritableDatabase().update("church_profile",values,"id=1",null);
+        if(changed!=1) throw new IllegalStateException("Church setup could not be found.");
+    }
+
     /** Create the church identity, adopted template copy and first unit atomically. */
     public String saveChurchSetup(String churchName, String unitName, String levelName, String templateId, String structureJson, int templateVersion) {
         String church = churchName == null ? "" : churchName.trim();
