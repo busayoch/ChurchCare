@@ -9,6 +9,8 @@ import android.net.Uri;
 import android.content.ContentUris;
 import android.provider.ContactsContract;
 import android.util.Xml;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import org.xmlpull.v1.XmlPullParser;
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -28,6 +30,7 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.ArrayAdapter;
 import android.widget.AdapterView;
@@ -1180,9 +1183,28 @@ public final class MainActivity extends Activity {
                 String id=get(c,"id"), title=recordTitle(table,c), detail=recordDetail(table,c);
                 LinearLayout card=new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(14),dp(12),dp(14),dp(12)); card.setBackgroundColor(0xFFFFFFFF);
                 LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2); cp.bottomMargin=dp(7); card.setLayoutParams(cp);
-                TextView t=new TextView(this); t.setText(title); t.setTextSize(16); t.setTypeface(null,1); t.setTextColor(ink); card.addView(t);
-                if (!detail.isEmpty()) { TextView d=new TextView(this); d.setText(detail); d.setTextSize(13); d.setTextColor(muted); d.setPadding(0,dp(4),0,0); card.addView(d); }
-                TextView actions=new TextView(this); actions.setText("Tap for details and actions"); actions.setTextSize(11); actions.setTextColor(blue); actions.setPadding(0,dp(7),0,0); card.addView(actions);
+                LinearLayout heading=new LinearLayout(this); heading.setOrientation(LinearLayout.HORIZONTAL); heading.setGravity(Gravity.CENTER_VERTICAL);
+                if(table.equals("members")) {
+                    String photoPath=get(c,"profile_photo_path");
+                    if(photoPath!=null&&!photoPath.trim().isEmpty()) {
+                        ImageView thumbnail=new ImageView(this);
+                        LinearLayout.LayoutParams imageParams=new LinearLayout.LayoutParams(dp(58),dp(58)); imageParams.rightMargin=dp(12);
+                        thumbnail.setLayoutParams(imageParams); thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                        try {
+                            Bitmap bitmap;
+                            if(photoPath.startsWith("/")) bitmap=BitmapFactory.decodeFile(photoPath);
+                            else try(InputStream photoIn=getContentResolver().openInputStream(Uri.parse(photoPath))) { bitmap=photoIn==null?null:BitmapFactory.decodeStream(photoIn); }
+                            if(bitmap!=null) thumbnail.setImageBitmap(bitmap);
+                            else thumbnail.setImageResource(android.R.drawable.ic_menu_camera);
+                        } catch(Exception photoError) { thumbnail.setImageResource(android.R.drawable.ic_menu_camera); }
+                        heading.addView(thumbnail);
+                    }
+                }
+                LinearLayout textColumn=new LinearLayout(this); textColumn.setOrientation(LinearLayout.VERTICAL);
+                TextView t=new TextView(this); t.setText(title); t.setTextSize(16); t.setTypeface(null,1); t.setTextColor(ink); textColumn.addView(t);
+                if (!detail.isEmpty()) { TextView d=new TextView(this); d.setText(detail); d.setTextSize(13); d.setTextColor(muted); d.setPadding(0,dp(4),0,0); textColumn.addView(d); }
+                TextView actions=new TextView(this); actions.setText("Tap for details and actions"); actions.setTextSize(11); actions.setTextColor(blue); actions.setPadding(0,dp(7),0,0); textColumn.addView(actions);
+                heading.addView(textColumn,new LinearLayout.LayoutParams(0,-2,1)); card.addView(heading);
                 ContentValues snapshot=new ContentValues(); for(int i=0;i<c.getColumnCount();i++){if(!c.isNull(i)) snapshot.put(c.getColumnName(i),c.getString(i));}
                 card.setOnClickListener(v->showRecordActions(table,id,snapshot));
                 list.addView(card);
