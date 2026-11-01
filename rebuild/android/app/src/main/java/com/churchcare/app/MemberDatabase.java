@@ -122,7 +122,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
     }
 
     private void createBaseTables(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY NOT NULL, full_name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', organization TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'Active', organization_id TEXT, profile_photo_path TEXT NOT NULL DEFAULT '', extra_photo_one_path TEXT NOT NULL DEFAULT '', extra_photo_two_path TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY', deleted INTEGER NOT NULL DEFAULT 0)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY NOT NULL, full_name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', organization TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'Active', organization_id TEXT, profile_photo_path TEXT NOT NULL DEFAULT '', extra_photo_one_path TEXT NOT NULL DEFAULT '', extra_photo_two_path TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, sync_state TEXT NOT NULL DEFAULT 'LOCAL_ONLY', deleted INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_members_name ON members(full_name COLLATE NOCASE)");
         db.execSQL("CREATE TABLE IF NOT EXISTS change_log (sequence INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, operation TEXT NOT NULL, created_at INTEGER NOT NULL, sync_state TEXT NOT NULL DEFAULT 'PENDING', last_error TEXT NOT NULL DEFAULT '')");
     }
@@ -392,7 +392,7 @@ public final class MemberDatabase extends SQLiteOpenHelper {
 
     public Cursor listMembers() {
         return getReadableDatabase().query("members",
-            new String[]{"id","full_name","phone","organization","address","status","organization_id","profile_photo_path","extra_photo_one_path","extra_photo_two_path","created_at","updated_at"},
+            new String[]{"id","full_name","phone","email","organization","address","status","organization_id","profile_photo_path","extra_photo_one_path","extra_photo_two_path","created_at","updated_at"},
             "deleted=0", null, null, null, "full_name COLLATE NOCASE ASC");
     }
 
@@ -410,8 +410,8 @@ public final class MemberDatabase extends SQLiteOpenHelper {
     public Cursor searchMembers(String query) {
         String q = "%" + query.trim() + "%";
         return getReadableDatabase().query("members", null,
-            "deleted=0 AND (full_name LIKE ? OR phone LIKE ? OR organization LIKE ? OR address LIKE ?)",
-            new String[]{q,q,q,q}, null, null, "full_name COLLATE NOCASE ASC");
+            "deleted=0 AND (full_name LIKE ? OR phone LIKE ? OR email LIKE ? OR organization LIKE ? OR address LIKE ?)",
+            new String[]{q,q,q,q,q}, null, null, "full_name COLLATE NOCASE ASC");
     }
 
     public int count(String table) {
