@@ -532,13 +532,22 @@ public final class MainActivity extends Activity {
                     }
                 }
                 try {
+                    String savedId;
                     if(editId==null) {
                         if(table.equals("appointments") && "Current".equalsIgnoreCase(values.getAsString("status")))
                             database.closeCurrentAppointments(values.getAsString("person_name"), values.getAsString("role"), values.getAsString("organization_id"), values.getAsString("start_date"));
-                        database.insertRecord(table,values);
-                    } else database.updateRecord(table,editId,values);
+                        savedId = database.insertRecord(table,values);
+                    } else {
+                        database.updateRecord(table,editId,values);
+                        savedId = editId;
+                    }
+                    int reportingLinks = 0;
+                    if (table.equals("appointments")) reportingLinks = database.refreshAllAutomaticFollowUpReporting();
                     if(table.equals("visits")) database.trimVisits(values.getAsString("member_name"));
-                    Toast.makeText(this,"Saved on this device",Toast.LENGTH_SHORT).show(); showRecords(table);
+                    String saveMessage = "Saved on this device";
+                    if (table.equals("appointments") && reportingLinks > 0)
+                        saveMessage += ". " + reportingLinks + " automatic Follow-up reporting link(s) updated";
+                    Toast.makeText(this,saveMessage,Toast.LENGTH_LONG).show(); showRecords(table);
                 } catch(Exception e){android.util.Log.e("ChurchCare","Save failed",e);Toast.makeText(this,"Could not save. Check the details and try again.",Toast.LENGTH_LONG).show();}
             }).show();
     }
